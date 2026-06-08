@@ -29,6 +29,7 @@
         <div class="card"><h3>Tipe Anomali Keselarasan</h3><div id="tbl-anomaly-types"></div></div>
         <div class="card"><h3>Verdict TreasurAI</h3><div id="tbl-verdicts"></div></div>
         <div class="card"><h3>Anomali Koherensi (Jenis Komponen)</h3><div id="tbl-coherence-sum"></div></div>
+        <div class="card"><h3>Deteksi Koherensi 3 Level</h3><div id="tbl-coherence-levels"></div></div>
         <div class="card"><h3>Simpul Knowledge Graph</h3><div id="tbl-nodes"></div></div>
       </div>
     </section>
@@ -85,18 +86,35 @@
     <section id="coherence" class="panel">
       <div class="toolbar">
         <label>K/L: <select id="c-kl"><option value="">Semua</option></select></label>
-        <label>Jenis anomali:
+        <label>Level:
+          <select id="c-level">
+            <option value="">Semua level</option>
+            <option value="level1">Level 1: Program-Kegiatan</option>
+            <option value="level2">Level 2: Kegiatan-Output</option>
+            <option value="level3">Level 3: Akun/Komponen</option>
+          </select>
+        </label>
+        <label>Jenis komponen:
           <select id="c-jenis">
             <option value="">Semua</option>
             <option value="pendukung_dominan">pendukung_dominan</option>
             <option value="utama_kecil">utama_kecil</option>
           </select>
         </label>
+        <label>Min skor: <input id="c-minscore" type="number" value="0" step="5" size="5" /></label>
         <button id="c-load">Terapkan</button>
         <button id="c-export" class="ghost">Export CSV</button>
         <span id="c-info" class="muted"></span>
       </div>
       <div id="tbl-coherence" class="tablewrap"></div>
+
+      <div class="toolbar" style="margin-top:18px">
+        <strong>Level 3 &mdash; Perbandingan Peer Komposisi Belanja</strong>
+        <button id="ca-load">Muat Peer</button>
+        <button id="ca-export" class="ghost">Export CSV</button>
+        <span id="ca-info" class="muted"></span>
+      </div>
+      <div id="tbl-coherence-akun" class="tablewrap"></div>
     </section>
 
     <!-- KL -->

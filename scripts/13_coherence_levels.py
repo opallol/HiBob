@@ -1,0 +1,349 @@
+#!/usr/bin/env python3
+"""
+13_coherence_levels.py
+----------------------
+Populates the 3-level coherence detection model onto ddac_coherence_2026
+(built by 12_coherence.py). Runs IN PLACE -- does not rebuild the 1.5M-row table.
+
+  Level 1  Program <-> Kegiatan   : bge-m3 cosine similarity  -> prog_keg_coherence
+  Level 2  Kegiatan <-> Output    : bge-m3 cosine similarity  -> keg_out_coherence
+  Level 3  Output  <-> Akun       : peer comparison of belanja -> out_komp_coherence,
+                                     akun_komposisi_score (+ detail table)
+
+Composite coherence_score = weighted blend of the per-level anomaly subscores and
+the existing jenis_komponen score. anomaly_flags lists which levels tripped.
+
+Design notes:
+ * Distinct planning texts are tiny (~2.9k), so embeddings are cheap.
+ * All heavy math is done in Python over the small distinct/aggregate sets, then
+   written back to the 1.5M rows with a SINGLE indexed UPDATE...JOIN against a
+   PK'd temp table (the only pattern that is fast at this scale).
+
+Usage:
+  python scripts/13_coherence_levels.py
+"""
+import json
+import time
+import sys
+
+import numpy as np
+
+sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else __file__.rsplit("/", 1)[0])
+from common.db import get_connection            # noqa: E402
+from common.config import EMBEDDING_MODEL       # noqa: E402
+
+# ---- thresholds / weights -------------------------------------------------
+PCT_LOW = 15            # percentile below which a similarity is "weak"
+PEER_MIN = 5            # min peer K/L to trust a peer profile
+DEV_FLAG = 0.40        # total-variation distance above which akun mix is unusual
+W_JENIS, W_L1, W_L2, W_L3 = 0.35, 0.20, 0.20, 0.25
+
+CAT_LABELS = {
+    "51": "Belanja Pegawai", "52": "Belanja Barang", "53": "Belanja Modal",
+    "54": "Belanja Bunga Utang", "55": "Belanja Subsidi", "56": "Belanja Hibah",
+    "57": "Belanja Bantuan Sosial", "58": "Belanja Lain-lain",
+    "61": "Pembiayaan", "62": "Pembiayaan", "63": "Pembiayaan",
+    "64": "Pembiayaan", "65": "Pembiayaan", "66": "Pembiayaan", "67": "Pembiayaan",
+}
+
+
+def robust_anom(sim, lo, hi):
+    """Map a similarity to a 0..100 anomaly subscore (low sim -> high score)."""
+    if hi <= lo:
+        return 0.0
+    v = (hi - sim) / (hi - lo)
+    return float(max(0.0, min(1.0, v)) * 100.0)
+
+
+def main():
+    conn = get_connection()
+    cur = conn.cursor()
+    t0 = time.time()
+
+    # =====================================================================
+    # Load embedding model
+    # =====================================================================
+    print("Loading embedding model %s ..." % EMBEDDING_MODEL)
+    from sentence_transformers import SentenceTransformer
+    model = SentenceTransformer(EMBEDDING_MODEL)
+    print("[%.0fs] model ready" % (time.time() - t0))
+
+    def embed(texts):
+        return model.encode(
+            texts, normalize_embeddings=True, batch_size=64,
+            show_progress_bar=False, convert_to_numpy=True,
+        ).astype(np.float32)
+
+    # =====================================================================
+    # Embed all distinct planning texts (program / kegiatan / output)
+    # =====================================================================
+    print("[%.0fs] Collecting distinct planning texts..." % (time.time() - t0))
+    texts = set()
+    for col in ("program_uraian", "kegiatan_uraian", "outputkro_uraian"):
+        cur.execute(
+            "SELECT DISTINCT %s FROM ddac_coherence_2026 "
+            "WHERE %s IS NOT NULL AND %s <> ''" % (col, col, col)
+        )
+        for (t,) in cur.fetchall():
+            texts.add(t)
+    texts = sorted(texts)
+    print("[%.0fs] Embedding %s distinct texts..." % (time.time() - t0, format(len(texts), ",")))
+    vecs = embed(texts)
+    vmap = {t: vecs[i] for i, t in enumerate(texts)}
+    print("[%.0fs] Embeddings done" % (time.time() - t0))
+
+    def cos(a, b):
+        va, vb = vmap.get(a), vmap.get(b)
+        if va is None or vb is None:
+            return None
+        return float(np.dot(va, vb))
+
+    # =====================================================================
+    # LEVEL 1: Program <-> Kegiatan  (grain: kl, prog, keg)
+    # =====================================================================
+    print("\n[%.0fs] LEVEL 1: program<->kegiatan" % (time.time() - t0))
+    cur.execute(
+        "SELECT DISTINCT kementerian_kode, program_kode, kegiatan_kode, "
+        "program_uraian, kegiatan_uraian FROM ddac_coherence_2026"
+    )
+    pk = {}  # (kl,prog,keg) -> sim
+    for kl, prog, keg, pu, ku in cur.fetchall():
+        c = cos(pu, ku)
+        if c is not None:
+            pk[(kl, prog, keg)] = c
+    sims1 = np.array(list(pk.values()), dtype=np.float64)
+    lo1, hi1 = np.percentile(sims1, 5), np.percentile(sims1, 95)
+    thr1 = np.percentile(sims1, PCT_LOW)
+    print("[%.0fs]   %s prog-keg pairs | sim p5/p50/p95 = %.3f/%.3f/%.3f | weak<%.3f"
+          % (time.time() - t0, format(len(pk), ","), lo1, np.percentile(sims1, 50), hi1, thr1))
+
+    # =====================================================================
+    # LEVEL 2: Kegiatan <-> Output  (grain: kl, prog, keg, out)
+    # =====================================================================
+    print("\n[%.0fs] LEVEL 2: kegiatan<->output" % (time.time() - t0))
+    cur.execute(
+        "SELECT DISTINCT kementerian_kode, program_kode, kegiatan_kode, outputkro_kode, "
+        "kegiatan_uraian, outputkro_uraian FROM ddac_coherence_2026"
+    )
+    ko = {}  # (kl,prog,keg,out) -> sim
+    for kl, prog, keg, out, ku, ou in cur.fetchall():
+        c = cos(ku, ou)
+        if c is not None:
+            ko[(kl, prog, keg, out)] = c
+    sims2 = np.array(list(ko.values()), dtype=np.float64)
+    lo2, hi2 = np.percentile(sims2, 5), np.percentile(sims2, 95)
+    thr2 = np.percentile(sims2, PCT_LOW)
+    print("[%.0fs]   %s keg-out pairs | sim p5/p50/p95 = %.3f/%.3f/%.3f | weak<%.3f"
+          % (time.time() - t0, format(len(ko), ","), lo2, np.percentile(sims2, 50), hi2, thr2))
+
+    # =====================================================================
+    # LEVEL 3: Output <-> Akun  (peer comparison of belanja composition)
+    # =====================================================================
+    print("\n[%.0fs] LEVEL 3: output<->akun peer comparison" % (time.time() - t0))
+
+    # Peer profile: category share per output code aggregated across ALL K/L.
+    cur.execute(
+        "SELECT outputkro_kode, LEFT(akun_kode,2) cat, CAST(SUM(total_pagu) AS DOUBLE) "
+        "FROM ddac_pagu_akun_2026 WHERE total_pagu > 0 GROUP BY outputkro_kode, LEFT(akun_kode,2)"
+    )
+    peer_cat = {}    # out -> {cat: pagu}
+    for out, cat, pagu in cur.fetchall():
+        peer_cat.setdefault(out, {})[cat] = pagu
+    cur.execute(
+        "SELECT outputkro_kode, COUNT(DISTINCT kementerian_kode) "
+        "FROM ddac_pagu_akun_2026 WHERE total_pagu > 0 GROUP BY outputkro_kode"
+    )
+    peer_count = {out: n for out, n in cur.fetchall()}
+    peer_share = {}
+    for out, cats in peer_cat.items():
+        tot = sum(cats.values())
+        if tot > 0:
+            peer_share[out] = {c: v / tot for c, v in cats.items()}
+    print("[%.0fs]   peer profiles for %s output codes" % (time.time() - t0, format(len(peer_share), ",")))
+
+    # Own profile per (kl,prog,keg,out)
+    cur.execute(
+        "SELECT kementerian_kode, program_kode, kegiatan_kode, outputkro_kode, "
+        "LEFT(akun_kode,2) cat, CAST(SUM(total_pagu) AS DOUBLE) "
+        "FROM ddac_pagu_akun_2026 WHERE total_pagu > 0 "
+        "GROUP BY kementerian_kode, program_kode, kegiatan_kode, outputkro_kode, LEFT(akun_kode,2)"
+    )
+    own = {}  # combo -> {cat: pagu}
+    for kl, prog, keg, out, cat, pagu in cur.fetchall():
+        own.setdefault((kl, prog, keg, out), {})[cat] = pagu
+    print("[%.0fs]   own profiles for %s combos" % (time.time() - t0, format(len(own), ",")))
+
+    dev_map = {}      # combo -> deviation (0..1)
+    detail_rows = []  # for ddac_coherence_akun_2026
+    for combo, cats in own.items():
+        out = combo[3]
+        psh = peer_share.get(out)
+        pc = peer_count.get(out, 0)
+        tot = sum(cats.values())
+        if not psh or tot <= 0:
+            continue
+        osh = {c: v / tot for c, v in cats.items()}
+        allcats = set(osh) | set(psh)
+        dev = 0.5 * sum(abs(osh.get(c, 0.0) - psh.get(c, 0.0)) for c in allcats)
+        dev_map[combo] = dev
+        unexpected = sorted(
+            ((c, osh.get(c, 0.0) - psh.get(c, 0.0)) for c in allcats),
+            key=lambda x: x[1], reverse=True,
+        )
+        top_unexpected = [
+            {"akun": c, "label": CAT_LABELS.get(c, "Lainnya"),
+             "own": round(osh.get(c, 0.0), 3), "peer": round(psh.get(c, 0.0), 3)}
+            for c, d in unexpected if d > 0.15
+        ][:3]
+        detail_rows.append((
+            combo[0], combo[1], combo[2], combo[3],
+            round((1 - dev) * 100, 2), round(dev * 100, 2), pc,
+            json.dumps({
+                "own": {c: round(s, 3) for c, s in sorted(osh.items())},
+                "peer": {c: round(s, 3) for c, s in sorted(psh.items())},
+                "deviation": round(dev, 3), "peer_count": pc,
+                "top_unexpected": top_unexpected,
+            }, ensure_ascii=False),
+        ))
+    print("[%.0fs]   computed deviation for %s combos" % (time.time() - t0, format(len(dev_map), ",")))
+
+    # =====================================================================
+    # Build the single PK'd combo table that drives all UPDATEs
+    # =====================================================================
+    print("\n[%.0fs] Building tmp_combo (output grain)..." % (time.time() - t0))
+    combos = set(ko) | set(dev_map)
+    rows = []
+    n_l1 = n_l2 = n_l3 = 0
+    for (kl, prog, keg, out) in combos:
+        sim1 = pk.get((kl, prog, keg))
+        sim2 = ko.get((kl, prog, keg, out))
+        dev = dev_map.get((kl, prog, keg, out))
+        pc = peer_count.get(out, 0)
+
+        l1_coh = round(sim1 * 100, 2) if sim1 is not None else None
+        l2_coh = round(sim2 * 100, 2) if sim2 is not None else None
+        l3_coh = round((1 - dev) * 100, 2) if dev is not None else None
+        l3_score = round(dev * 100, 2) if dev is not None else None
+
+        l1_anom = robust_anom(sim1, lo1, hi1) if sim1 is not None else 0.0
+        l2_anom = robust_anom(sim2, lo2, hi2) if sim2 is not None else 0.0
+        l3_anom = (dev * 100.0) if dev is not None else 0.0
+
+        flags = []
+        if sim1 is not None and sim1 < thr1:
+            flags.append("level1_program_kegiatan_lemah"); n_l1 += 1
+        if sim2 is not None and sim2 < thr2:
+            flags.append("level2_kegiatan_output_lemah"); n_l2 += 1
+        if dev is not None and pc >= PEER_MIN and dev >= DEV_FLAG:
+            flags.append("level3_akun_tidak_lazim"); n_l3 += 1
+
+        rows.append((
+            kl, prog, keg, out, l1_coh, l2_coh, l3_coh, l3_score,
+            round(l1_anom, 2), round(l2_anom, 2), round(l3_anom, 2),
+            json.dumps(flags, ensure_ascii=False) if flags else None,
+        ))
+    print("[%.0fs]   %s combos | flags L1=%s L2=%s L3=%s"
+          % (time.time() - t0, format(len(rows), ","),
+             format(n_l1, ","), format(n_l2, ","), format(n_l3, ",")))
+
+    cur.execute("DROP TABLE IF EXISTS tmp_combo")
+    cur.execute(
+        "CREATE TABLE tmp_combo ("
+        " kementerian_kode CHAR(3), program_kode CHAR(2), kegiatan_kode CHAR(4), outputkro_kode CHAR(3),"
+        " l1_coh DECIMAL(5,2), l2_coh DECIMAL(5,2), l3_coh DECIMAL(5,2), l3_score DECIMAL(5,2),"
+        " l1_anom DECIMAL(5,2), l2_anom DECIMAL(5,2), l3_anom DECIMAL(5,2), flags JSON,"
+        " PRIMARY KEY (kementerian_kode, program_kode, kegiatan_kode, outputkro_kode)"
+        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+    )
+    conn.commit()
+    for i in range(0, len(rows), 5000):
+        cur.executemany(
+            "INSERT INTO tmp_combo VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            rows[i:i + 5000],
+        )
+    conn.commit()
+    print("[%.0fs]   tmp_combo inserted" % (time.time() - t0))
+
+    # Index on coherence table for the join (kl,prog,keg,out).
+    cur.execute("SHOW INDEX FROM ddac_coherence_2026 WHERE Key_name='idx_ko'")
+    if not cur.fetchall():
+        print("[%.0fs] Adding idx_ko..." % (time.time() - t0))
+        cur.execute(
+            "ALTER TABLE ddac_coherence_2026 "
+            "ADD INDEX idx_ko (kementerian_kode, program_kode, kegiatan_kode, outputkro_kode)"
+        )
+        conn.commit()
+
+    # =====================================================================
+    # Single indexed UPDATE: write all level columns + composite + flags
+    # =====================================================================
+    print("[%.0fs] Applying level columns to 1.5M rows..." % (time.time() - t0))
+    cur.execute(
+        "UPDATE ddac_coherence_2026 c JOIN tmp_combo t "
+        " ON c.kementerian_kode=t.kementerian_kode AND c.program_kode=t.program_kode "
+        " AND c.kegiatan_kode=t.kegiatan_kode AND c.outputkro_kode=t.outputkro_kode "
+        "SET c.prog_keg_coherence=t.l1_coh, c.keg_out_coherence=t.l2_coh, "
+        " c.out_komp_coherence=t.l3_coh, c.akun_komposisi_score=t.l3_score, "
+        " c.anomaly_flags=t.flags, "
+        " c.coherence_score=ROUND(%s*c.jenis_anomaly_score + %s*t.l1_anom + %s*t.l2_anom + %s*t.l3_anom, 2)"
+        % (W_JENIS, W_L1, W_L2, W_L3)
+    )
+    conn.commit()
+    print("[%.0fs]   updated %s rows" % (time.time() - t0, format(cur.rowcount, ",")))
+    cur.execute("DROP TABLE IF EXISTS tmp_combo")
+    conn.commit()
+
+    # =====================================================================
+    # Level-3 detail table (rich per-output peer comparison)
+    # =====================================================================
+    print("[%.0fs] Writing ddac_coherence_akun_2026 (level-3 detail)..." % (time.time() - t0))
+    cur.execute("DROP TABLE IF EXISTS ddac_coherence_akun_2026")
+    cur.execute(
+        "CREATE TABLE ddac_coherence_akun_2026 ("
+        " kementerian_kode CHAR(3), program_kode CHAR(2), kegiatan_kode CHAR(4), outputkro_kode CHAR(3),"
+        " out_komp_coherence DECIMAL(5,2), akun_komposisi_score DECIMAL(5,2), peer_count INT,"
+        " akun_detail JSON,"
+        " PRIMARY KEY (kementerian_kode, program_kode, kegiatan_kode, outputkro_kode),"
+        " INDEX idx_score (akun_komposisi_score)"
+        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+    )
+    conn.commit()
+    for i in range(0, len(detail_rows), 5000):
+        cur.executemany(
+            "INSERT INTO ddac_coherence_akun_2026 VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+            detail_rows[i:i + 5000],
+        )
+    conn.commit()
+    print("[%.0fs]   %s detail rows" % (time.time() - t0, format(len(detail_rows), ",")))
+
+    # =====================================================================
+    # Summary
+    # =====================================================================
+    print("\n" + "=" * 60)
+    print("MULTI-LEVEL COHERENCE SUMMARY")
+    print("=" * 60)
+    cur.execute(
+        "SELECT "
+        " AVG(prog_keg_coherence), AVG(keg_out_coherence), AVG(out_komp_coherence), "
+        " AVG(akun_komposisi_score), AVG(coherence_score) FROM ddac_coherence_2026"
+    )
+    a = cur.fetchone()
+    print("avg L1 prog_keg   : %.2f" % (a[0] or 0))
+    print("avg L2 keg_out    : %.2f" % (a[1] or 0))
+    print("avg L3 out_komp   : %.2f" % (a[2] or 0))
+    print("avg akun_score    : %.2f" % (a[3] or 0))
+    print("avg composite     : %.2f" % (a[4] or 0))
+    for flag in ("level1_program_kegiatan_lemah", "level2_kegiatan_output_lemah", "level3_akun_tidak_lazim"):
+        cur.execute(
+            "SELECT COUNT(*), CAST(SUM(total_pagu) AS DOUBLE) FROM ddac_coherence_2026 "
+            "WHERE JSON_CONTAINS(anomaly_flags, %s)", (json.dumps(flag),)
+        )
+        cnt, pagu = cur.fetchone()
+        print("  %-32s: %10s rows | Rp %.1f T" % (flag, format(cnt or 0, ","), (pagu or 0) / 1e12))
+
+    print("\n[%.0fs] Done. Tables: ddac_coherence_2026, ddac_coherence_akun_2026" % (time.time() - t0))
+    conn.close()
+
+
+if __name__ == "__main__":
+    main()

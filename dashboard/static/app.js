@@ -96,6 +96,11 @@ async function loadOverview() {
     { title: "Jumlah", key: "n", num: true, render: fmtNum },
     { title: "Pagu", key: "pagu", num: true, render: fmtRp },
   ]);
+  renderTable($("#tbl-coherence-levels"), s.coherence_levels || [], [
+    { title: "Level Deteksi", key: "level" },
+    { title: "Terdeteksi", key: "n", num: true, render: fmtNum },
+    { title: "Pagu", key: "pagu", num: true, render: fmtRp },
+  ]);
   renderTable($("#tbl-nodes"), Object.entries(s.nodes).map(([k, v]) => ({ t: k, n: v })), [
     { title: "Tipe Simpul", key: "t" },
     { title: "Jumlah", key: "n", num: true, render: fmtNum },
@@ -134,22 +139,70 @@ async function loadAnomalies() {
 }
 
 // ---- Coherence ----
+const flagLabels = {
+  level1_program_kegiatan_lemah: "L1",
+  level2_kegiatan_output_lemah: "L2",
+  level3_akun_tidak_lazim: "L3",
+};
+function renderFlags(v) {
+  if (!v) return "-";
+  let arr;
+  try { arr = typeof v === "string" ? JSON.parse(v) : v; } catch { return esc(v); }
+  if (!Array.isArray(arr) || !arr.length) return "-";
+  return arr.map((f) => `<span class="badge b-${esc(f)}">${esc(flagLabels[f] || f)}</span>`).join(" ");
+}
+const score1 = (v) => (v == null ? "-" : Number(v).toFixed(1));
 const cohCols = [
   { title: "K/L", key: "kementerian_uraian", render: (v, r) => esc(r.kementerian_kode) + " - " + esc(v) },
   { title: "Program", key: "program_uraian" },
+  { title: "Kegiatan", key: "kegiatan_uraian" },
   { title: "Output/KRO", key: "outputkro_uraian" },
   { title: "Komponen", key: "komponen_uraian" },
   { title: "Jenis", key: "jenis_komponen" },
-  { title: "Anomali", key: "jenis_anomaly", render: (v) => badge(v) },
-  { title: "Skor", key: "jenis_anomaly_score", num: true },
+  { title: "L1 Prog-Keg", key: "prog_keg_coherence", num: true, render: score1 },
+  { title: "L2 Keg-Out", key: "keg_out_coherence", num: true, render: score1 },
+  { title: "L3 Out-Komp", key: "out_komp_coherence", num: true, render: score1 },
+  { title: "Skor Akun", key: "akun_komposisi_score", num: true, render: score1 },
+  { title: "Komposit", key: "coherence_score", num: true, render: score1 },
+  { title: "Flags", key: "anomaly_flags", render: renderFlags },
   { title: "Pagu", key: "total_pagu", num: true, render: fmtRp },
 ];
 let cohRows = [];
 async function loadCoherence() {
   $("#c-info").textContent = "memuat...";
-  cohRows = await api("/coherence", { kl: $("#c-kl").value, jenis: $("#c-jenis").value, limit: 500 });
+  cohRows = await api("/coherence", {
+    kl: $("#c-kl").value, level: $("#c-level").value, jenis: $("#c-jenis").value,
+    min_score: $("#c-minscore").value || 0, limit: 500,
+  });
   renderTable($("#tbl-coherence"), cohRows, cohCols);
   $("#c-info").textContent = cohRows.length + " baris";
+}
+
+// ---- Coherence: Level-3 peer comparison ----
+function renderPeer(v) {
+  if (!v) return "-";
+  let d;
+  try { d = typeof v === "string" ? JSON.parse(v) : v; } catch { return "-"; }
+  const top = (d.top_unexpected || []);
+  if (!top.length) return `dev ${((d.deviation || 0) * 100).toFixed(0)}%`;
+  const parts = top.map((t) =>
+    `${esc(t.akun)} ${esc(t.label)}: <b>${(t.own * 100).toFixed(0)}%</b> vs peer ${(t.peer * 100).toFixed(0)}%`);
+  return `<div class="reason">${parts.join(" &middot; ")}</div>`;
+}
+const caCols = [
+  { title: "K/L", key: "kementerian_uraian", render: (v, r) => esc(r.kementerian_kode) + " - " + esc(v) },
+  { title: "Output/KRO", key: "outputkro_uraian", render: (v, r) => esc(r.outputkro_kode) + " " + esc(v) },
+  { title: "Skor Akun", key: "akun_komposisi_score", num: true, render: score1 },
+  { title: "Peer", key: "peer_count", num: true, render: fmtNum },
+  { title: "Penyimpangan vs Peer", key: "akun_detail", render: renderPeer },
+  { title: "Koherensi", key: "out_komp_coherence", num: true, render: score1 },
+];
+let caRows = [];
+async function loadCoherenceAkun() {
+  $("#ca-info").textContent = "memuat...";
+  caRows = await api("/coherence-akun", { kl: $("#c-kl").value, limit: 300 });
+  renderTable($("#tbl-coherence-akun"), caRows, caCols);
+  $("#ca-info").textContent = caRows.length + " output";
 }
 
 // ---- K/L assignments ----
@@ -198,6 +251,8 @@ $("#a-load").addEventListener("click", loadAnomalies);
 $("#a-export").addEventListener("click", () => download("anomali_keselarasan.csv", toCSV(anomRows, anomCols)));
 $("#c-load").addEventListener("click", loadCoherence);
 $("#c-export").addEventListener("click", () => download("anomali_koherensi.csv", toCSV(cohRows, cohCols)));
+$("#ca-load").addEventListener("click", loadCoherenceAkun);
+$("#ca-export").addEventListener("click", () => download("peer_komposisi_akun.csv", toCSV(caRows, caCols)));
 $("#k-load").addEventListener("click", loadKl);
 $("#k-export").addEventListener("click", () => download("penugasan_kl.csv", toCSV(klRows, klCols)));
 $("#g-load").addEventListener("click", loadGraph);

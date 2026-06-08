@@ -9,6 +9,7 @@
   --green: #3fb950;
   --red: #f85149;
   --amber: #d29922;
+  --blue: #4ea1ff;
 }
 * { box-sizing: border-box; }
 body {
@@ -76,6 +77,9 @@ tr:hover td { background: rgba(78,161,255,.06); }
 .b-manual_review { background: rgba(210,153,34,.15); color: var(--amber); }
 .b-pendukung_dominan { background: rgba(210,153,34,.15); color: var(--amber); }
 .b-utama_kecil { background: rgba(248,81,73,.15); color: var(--red); }
+.b-level1_program_kegiatan_lemah { background: rgba(78,161,255,.15); color: var(--blue); }
+.b-level2_kegiatan_output_lemah { background: rgba(210,153,34,.15); color: var(--amber); }
+.b-level3_akun_tidak_lazim { background: rgba(248,81,73,.15); color: var(--red); }
 
 #network { height: 72vh; border: 1px solid var(--line); border-radius: 10px; background: #0c1116; }
 .reason { max-width: 460px; white-space: pre-wrap; color: var(--muted); }
