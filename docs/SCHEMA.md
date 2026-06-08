@@ -1,6 +1,7 @@
 # DeepSeek Policy KMS — Database Schema
 
-Semua tabel dalam database `ddac2026` dengan prefix `deepseek_policy_*`.
+Semua tabel dalam database `ddac2026`. Tabel knowledge graph berprefix
+`deepseek_policy_*`; tabel hasil analisis berprefix `ddac_*`.
 
 ## Table Inventory
 
@@ -15,6 +16,9 @@ Semua tabel dalam database `ddac2026` dengan prefix `deepseek_policy_*`.
 | 7 | deepseek_policy_table_rows | 1 per row | Parsed table rows |
 | 8 | deepseek_policy_embeddings | 1 per vector | bge-m3 embeddings |
 | 9 | deepseek_policy_kl_assignments | 1 per K/L-KP link | Institutional assignments |
+| 10 | ddac_anomaly_2026 | 1 per alignment text | Policy alignment results |
+| 11 | ddac_coherence_2026 | 1 per pagu akun | Koherensi internal 3 level |
+| 12 | ddac_coherence_akun_2026 | 1 per (kl,prog,keg,out) | Detail peer komposisi akun (Level 3) |
 
 ---
 
@@ -100,8 +104,8 @@ CREATE TABLE deepseek_policy_nodes (
     source_type VARCHAR(50) NOT NULL COMMENT 'RPJMN, RKP_2025, RKP_2026',
     node_type VARCHAR(50) NOT NULL COMMENT 'PN, PP, KP, PROGRAM, KEGIATAN, KRO, RO',
     node_code VARCHAR(200) NOT NULL COMMENT 'Original code: 01, 01.01, etc.',
-    node_name TEXT NOT NULL COMMENT 'Raw extracted name',
-    clean_node_name_ai TEXT COMMENT 'AI-cleaned name',
+    node_name TEXT NOT NULL COMMENT 'Raw extracted name (blob ~250 char)',
+    clean_node_name_ai TEXT COMMENT 'Nama bersih (14_fix_node_names: regex unglue)',
     parent_code VARCHAR(200) DEFAULT '' COMMENT 'Parent node code',
     normalized_code VARCHAR(200) DEFAULT '' COMMENT 'Normalized: PN-01, PP-01-01',
     source_page INT DEFAULT 0,
@@ -233,15 +237,60 @@ CREATE TABLE deepseek_policy_kl_assignments (
 );
 ```
 
+## 11. ddac_coherence_2026 — Koherensi Internal 3 Level
+
+Satu baris per agregasi pagu akun (1,504,455 rows). Dibangun oleh `12_coherence.py`
+(jenis komponen) lalu diperkaya `13_coherence_levels.py` (Level 1/2/3 + composite).
+
+```sql
+-- Kolom inti koherensi (selain kolom dimensi pagu)
+jenis_komponen        VARCHAR  COMMENT 'Utama / Pendukung / none (t_kmpnen_2026)'
+jenis_anomaly         VARCHAR  COMMENT 'pendukung_dominan / utama_kecil / unclassified / normal'
+jenis_anomaly_score   DOUBLE   COMMENT 'Severity 0-100'
+prog_keg_coherence    DOUBLE   COMMENT 'Level 1: cosine bge-m3 Program<->Kegiatan x100'
+keg_out_coherence     DOUBLE   COMMENT 'Level 2: cosine bge-m3 Kegiatan<->Output x100'
+out_komp_coherence    DOUBLE   COMMENT 'Level 3: 100 - deviasi komposisi akun'
+akun_komposisi_score  DOUBLE   COMMENT 'Level 3: deviasi vs peer x100 (0-100)'
+akun_detail           JSON     COMMENT 'Ringkasan komposisi own vs peer'
+coherence_score       DOUBLE   COMMENT '0.35*jenis + 0.20*L1 + 0.20*L2 + 0.25*L3'
+anomaly_flags         JSON     COMMENT 'Array level terpicu, mis. ["level3_akun_tidak_lazim"]'
+```
+
+**anomaly_flags** dapat berisi: `level1_program_kegiatan_lemah`,
+`level2_kegiatan_output_lemah`, `level3_akun_tidak_lazim`.
+Threshold: L1/L2 bila similarity < persentil-15; L3 bila `peer_count >= 5` dan
+deviasi >= 0.40.
+
+## 12. ddac_coherence_akun_2026 — Detail Peer Komposisi Akun (Level 3)
+
+Satu baris per (K/L, program, kegiatan, output) dengan perbandingan komposisi
+belanja terhadap peer (output berkode sama lintas K/L). ~8K rows.
+
+```sql
+PRIMARY KEY (kementerian_kode, program_kode, kegiatan_kode, outputkro_kode)
+out_komp_coherence    DOUBLE   COMMENT '100 - deviasi'
+akun_komposisi_score  DOUBLE   COMMENT 'Deviasi komposisi x100'
+peer_count            INT      COMMENT 'Jumlah K/L peer (output kode sama)'
+akun_detail           JSON     COMMENT '{own, peer, deviation, peer_count, top_unexpected}'
+-- INDEX idx_ko (outputkro_kode) untuk enrich uraian dari ddac_coherence_2026
+```
+
+Deviasi = total variation distance = `0.5 * sum|own_share - peer_share|` atas
+kategori akun 2-digit (51 Pegawai, 52 Barang, 53 Modal, 54 Bunga, 55 Subsidi,
+57 Bansos, 58 Lain, 61-67 Pembiayaan).
+
+---
+
 ## Key Differences vs Codex
 
 | Feature | codex_policy_* | deepseek_policy_* |
 |---------|---------------|-------------------|
 | clean_text_ai | Empty (NULL) | Populated via LLM |
-| clean_node_name_ai | Empty (NULL) | Populated via LLM |
+| clean_node_name_ai | Empty (NULL) | Populated (regex unglue, 856/891) |
 | edges table | Exists but empty | Populated with hierarchy |
 | embeddings | Exists but empty | Populated with bge-m3 |
 | document_text_path | Not stored | source_path tracked |
 | extraction_status | Not tracked | Per-document status field |
-| kl_assignments | Not present | Dedicated table |
+| kl_assignments | Not present | Dedicated table (585 baris) |
+| coherence (3 level) | Not present | ddac_coherence_2026 + _akun_2026 |
 | normalized_code | Not present | PN-01, PP-01-01 format |

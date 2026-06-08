@@ -38,7 +38,22 @@ DeepSeek Policy KMS adalah knowledge management system yang mengekstrak, members
     │
     ▼
 [Phase 8: K/L Assign] ── Parse institutional assignments
-       deepseek_policy_kl_assignments
+    │  deepseek_policy_kl_assignments
+    │
+    ▼
+[Phase 10: Policy Alignment] ── bge-m3 cosine pagu vs KP nodes
+    │  ddac_anomaly_2026 (389 policy orphans) + TreasurAI reasoning
+    │
+    ▼
+[Phase 12-13: Internal Coherence] ── 3-level structural check
+    │  ddac_coherence_2026 + ddac_coherence_akun_2026
+    │
+    ▼
+[Phase 14: Name Cleanup] ── deterministic unglue node_name
+    │  deepseek_policy_nodes.clean_node_name_ai
+    │
+    ▼
+[Phase 15: Dashboard] ── FastAPI + vis-network (human review)
 ```
 
 ## 2. Why DeepSeek Wins
@@ -95,3 +110,47 @@ PN (Prioritas Nasional) ──── 8 items (RPJMN-defined)
 - **Embeddings**: bge-m3 (BAAI) via sentence-transformers — local, no API cost
 - **Database**: MySQL 8.4 (172.16.2.153) — existing infrastructure
 - **Language**: Python 3.11+ with pymysql, pymupdf, sentence-transformers
+
+## 6. Internal Coherence — 3-Level Detection Model (2026-06-08)
+
+Selain keselarasan ke RPJMN/RKP, struktur internal DIPA dicek konsistensinya pada
+tiga tingkat hierarki anggaran. Diimplementasikan `13_coherence_levels.py`, mengisi
+`ddac_coherence_2026` secara in-place (idempoten, tanpa rebuild).
+
+```
+Program ──L1 cosine──► Kegiatan ──L2 cosine──► Output ──L3 peer──► Komposisi Akun
+```
+
+| Level | Pertanyaan | Metode | Output kolom |
+|-------|-----------|--------|--------------|
+| 1 | Kegiatan selaras dgn program? | cosine bge-m3 (uraian) | prog_keg_coherence |
+| 2 | Output selaras dgn kegiatan? | cosine bge-m3 (uraian) | keg_out_coherence |
+| 3 | Jenis belanja lazim utk output ini? | peer comparison lintas K/L | out_komp_coherence, akun_komposisi_score |
+
+**Level 3 (peer comparison):** untuk setiap output, distribusi belanja per kategori
+akun 2-digit dibandingkan dengan rata-rata seluruh output berkode sama di semua K/L.
+Deviasi memakai **total variation distance** `0.5·Σ|own−peer|`. Karena similarity
+bge-m3 terkompresi (~0.40–0.77), **threshold memakai persentil (P15)** bukan nilai
+absolut. Detail per output disimpan di `ddac_coherence_akun_2026.akun_detail` (JSON).
+
+Composite: `coherence_score = 0.35·jenis + 0.20·L1 + 0.20·L2 + 0.25·L3`.
+Flag terkumpul di `anomaly_flags` (JSON array).
+
+## 7. Pembersihan Nama Simpul
+
+`node_name` dari ekstraksi PDF adalah blob ~250 karakter (nama + sasaran + indikator
++ angka + K/L) dengan kata menempel akibat hilangnya spasi line-break.
+`14_fix_node_names.py` membersihkannya secara **deterministik (regex, bukan LLM)**
+ke `clean_node_name_ai`: (1) potong sebelum penanda sasaran `NN -`; (2) pisah
+camelCase; (3) pisah kata sambung yang menempel (`Abadidan`→`Abadi dan`). 856/891
+simpul dibersihkan. Sifatnya non-destruktif; dashboard memakai
+`COALESCE(clean_node_name_ai, node_name)`.
+
+## 8. Dashboard Review (Human-in-the-loop)
+
+`dashboard/app.py` (FastAPI) menyajikan API JSON di atas seluruh tabel hasil, dengan
+frontend statis (`dashboard/static/`, vis-network). Lima tab: Ringkasan, Knowledge
+Graph, Anomali Keselarasan, Anomali Koherensi (filter Level 1/2/3 + tabel peer
+komposisi akun), dan Penugasan K/L. Endpoint utama: `/api/summary`, `/api/graph`,
+`/api/anomalies`, `/api/coherence`, `/api/coherence-akun`, `/api/kl-assignments`.
+Backend memakai modul bersama `scripts/common` (config + koneksi DB).

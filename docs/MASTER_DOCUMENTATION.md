@@ -2,9 +2,13 @@
 ## Master Documentation
 
 **Author:** DeepSeek via Hermes Agent
-**Date:** 2026-06-07
+**Date:** 2026-06-07 (terakhir diperbarui: 2026-06-08)
 **Project:** D:\Project\deepseek-kms
 **Database:** ddac2026 @ 172.16.2.153
+
+> **Update 2026-06-08:** Pipeline kini lengkap end-to-end — K/L mapping (08),
+> koherensi 3 level (13), pembersihan nama simpul (14), dan dashboard interaktif
+> (FastAPI + vis-network). Lihat Bagian 5.4–5.6 untuk hasil terbaru.
 
 ---
 
@@ -180,17 +184,50 @@ bge-m3 vectors untuk setiap unique alignment_text.
 
 ## 2.5 ddac_coherence_2026 — Internal Coherence (1,504,455 rows)
 
-Deteksi anomali struktur internal DIPA.
+Deteksi anomali struktur internal DIPA secara **3 level** (semua kolom kini terisi).
 
 | Key Columns | Desc |
 |-------------|------|
-| jenis_komponen | Utama / Pendukung / None (from t_kmpnen_2026) |
+| jenis_komponen | Utama / Pendukung / none (dari t_kmpnen_2026) |
 | jenis_anomaly | pendukung_dominan / utama_kecil / unclassified / normal |
 | jenis_anomaly_score | Severity score (0-100) |
-| coherence_score | Composite coherence (0-100) |
-| prog_keg_coherence | Program↔Kegiatan cosine (future) |
-| keg_out_coherence | Kegiatan↔Output cosine (future) |
-| akun_komposisi_score | Akun composition anomaly (future) |
+| prog_keg_coherence | **Level 1** Program↔Kegiatan cosine bge-m3 (×100) ✅ |
+| keg_out_coherence | **Level 2** Kegiatan↔Output cosine bge-m3 (×100) ✅ |
+| out_komp_coherence | **Level 3** keselarasan komposisi akun (100 − deviasi) ✅ |
+| akun_komposisi_score | **Level 3** skor anomali komposisi belanja (0-100) ✅ |
+| coherence_score | Composite: 0.35·jenis + 0.20·L1 + 0.20·L2 + 0.25·L3 |
+| anomaly_flags | JSON daftar level yang terpicu (mis. `["level3_akun_tidak_lazim"]`) |
+
+Threshold flag: L1/L2 dipicu bila similarity < persentil-15 distribusinya;
+L3 dipicu bila `peer_count >= 5` dan deviasi komposisi >= 0.40.
+
+## 2.6 ddac_coherence_akun_2026 — Level-3 Peer Detail (~8K rows)
+
+Detail perbandingan komposisi belanja per output terhadap **peer lintas K/L**
+(output berkode sama, mis. semua "EBA"). Satu baris per (K/L, program, kegiatan, output).
+
+| Key Columns | Desc |
+|-------------|------|
+| outputkro_kode | Kode output (peer dibandingkan per kode ini) |
+| akun_komposisi_score | Deviasi komposisi vs peer × 100 (0-100) |
+| out_komp_coherence | 100 − deviasi |
+| peer_count | Jumlah K/L peer dengan output kode sama |
+| akun_detail | JSON `{own, peer, deviation, peer_count, top_unexpected}` |
+
+`top_unexpected` memuat kategori akun 2-digit yang share-nya jauh di atas peer,
+mis. `{"akun":"53","label":"Belanja Modal","own":0.98,"peer":0.00}`.
+
+## 2.7 deepseek_policy_kl_assignments — K/L Mapping (585 rows)
+
+Pemetaan KP → K/L pelaksana (dari Matriks Lampiran III RPJMN/RKP).
+
+| Key Columns | Desc |
+|-------------|------|
+| node_id | FK ke deepseek_policy_nodes (KP/PP) |
+| kddept | Kode K/L |
+| nmdept_normalized | Nama K/L ternormalisasi |
+| role | pelaksana / pendukung |
+| confidence | Skor keyakinan (0-1) |
 
 ---
 
@@ -207,10 +244,16 @@ Semua script di `D:\Project\deepseek-kms\scripts\`
 | 04 | extract_nodes.py | clean chunks | nodes (PN/PP/KP) | ✅ |
 | 05 | build_edges.py | nodes | edges (hierarchy) | ✅ |
 | 07 | generate_embeddings.py | nodes | bge-m3 embeddings | ✅ |
+| 08 | extract_kl.py | KL_MATRIX chunks | kl_assignments (585) | ✅ |
 | 09 | master_pipeline.py | all above | final nodes+edges+emb | ✅ |
 | 10 | anomaly_detect.py | pagu + KP vectors | ddac_anomaly_2026 | ✅ |
 | 11 | treasurai_reasoning.py | anomalies | llm_reasoning | ✅ |
-| 12 | coherence.py | pagu + t_kmpnen | ddac_coherence_2026 | ⬜ |
+| 12 | coherence.py | pagu + t_kmpnen | ddac_coherence_2026 (jenis komponen) | ✅ |
+| 13 | coherence_levels.py | coherence + pagu | Level 1/2/3 + composite + peer detail | ✅ |
+| 14 | fix_node_names.py | nodes | clean_node_name_ai (856 dibersihkan) | ✅ |
+
+> **Dashboard:** `dashboard/app.py` (FastAPI) + `dashboard/static/` (HTML/JS/CSS,
+> vis-network). Menyajikan API JSON di atas seluruh tabel di atas. Lihat Bagian 4.4.
 
 ---
 
@@ -240,8 +283,10 @@ python scripts\07_generate_embeddings.py
 python scripts\10_anomaly_detect.py
 python scripts\11_treasurai_reasoning.py 30
 
-# Phase 3: Coherence
-python scripts\12_coherence.py
+# Phase 3: Coherence (3 level) + cleanup nama
+python scripts\12_coherence.py          # Level 0: jenis komponen
+python scripts\13_coherence_levels.py   # Level 1/2/3 + composite + peer
+python scripts\14_fix_node_names.py     # bersihkan nama simpul
 ```
 
 ## 4.3 One-Click Batch Files
@@ -250,6 +295,19 @@ python scripts\12_coherence.py
 |------|----------|
 | `RUN_TREASURAI.bat` | TreasuryAI reasoning |
 | `RUN_COHERENCE.bat` | Internal coherence detection |
+
+## 4.4 Dashboard Interaktif
+
+```bash
+cd D:\Project\deepseek-kms\dashboard
+..\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8123 --reload
+# Buka http://127.0.0.1:8123
+```
+
+5 tab: Ringkasan (KPI), Knowledge Graph (vis-network PN→PP→KP), Anomali
+Keselarasan (filter + CSV + reasoning TreasurAI), Anomali Koherensi (filter level
+1/2/3 + tabel peer komposisi akun), Penugasan K/L. Backend memakai modul bersama
+`scripts/common` (db + config).
 
 ---
 
@@ -303,6 +361,45 @@ PN 01: Memperkokoh Ideologi Pancasila, Demokrasi, dan HAM
 "FengeEbangan Tenaga Tektia"  →  "Pengembangan Tenaga Teknis"
 "Demolqasi, dan Hek Asasi"    →  "Demokrasi, dan Hak Asasi"
 ```
+
+## 5.4 Internal Coherence — Model 3 Level (NEW 2026-06-08)
+
+Koherensi internal kini dianalisis pada tiga tingkat hierarki anggaran:
+
+| Level | Cek | Basis |
+|-------|-----|-------|
+| 1. Program↔Kegiatan | Apakah kegiatan selaras dengan program? | cosine bge-m3 |
+| 2. Kegiatan↔Output | Apakah output selaras dengan kegiatan? | cosine bge-m3 |
+| 3. Output↔Akun/Komponen | Apakah jenis belanja masuk akal untuk output ini? | peer comparison lintas K/L |
+
+**Hasil flag** (dari `anomaly_flags`):
+| Level | Baris tertandai | Pagu |
+|-------|-----------------|------|
+| Level 1 (program-kegiatan lemah) | 181,492 | Rp 171.6 T |
+| Level 2 (kegiatan-output lemah) | 85,067 | Rp 282.6 T |
+| Level 3 (komposisi akun tidak lazim) | 169,162 | Rp 194.8 T |
+
+**Inti Level 3 (peer comparison):** komposisi belanja sebuah output dibandingkan
+dengan rata-rata seluruh output berkode sama lintas K/L. Contoh nyata:
+- Output **"Layanan Dukungan Manajemen Internal" (EBA)** di Polri → **98% Belanja
+  Modal (akun 53)** padahal rata-rata 99 K/L peer ~0% modal → anomali.
+- Output **"Prasarana Konektivitas Darat (Jalan)" (RBC)** → **100% Belanja Barang
+  (akun 52)** vs peer 1% → anomali (semestinya Belanja Modal).
+
+## 5.5 Pembersihan Nama Simpul (NEW 2026-06-08)
+
+`node_name` hasil ekstraksi PDF ternyata berupa blob ~250 karakter (nama + sasaran
++ indikator + angka + K/L) dengan kata-kata yang menempel akibat hilangnya spasi
+line-break. Script `14_fix_node_names.py` membersihkannya secara deterministik ke
+kolom `clean_node_name_ai` (non-destruktif): potong ke nama asli sebelum penanda
+sasaran `NN -`, pisah camelCase (`HakAsasi`→`Hak Asasi`) dan kata sambung yang
+menempel (`Abadidan`→`Abadi dan`). **856/891 nama dibersihkan.** Dashboard memakai
+`COALESCE(clean_node_name_ai, node_name)`.
+
+## 5.6 K/L Institutional Mapping (NEW)
+
+Script `08_extract_kl.py` memetakan KP → K/L pelaksana dari Matriks Lampiran III:
+**585 penugasan** (355 simpul KP/PP, 71 K/L), confidence 582@0.9 / 3@0.6.
 
 ---
 
@@ -386,6 +483,18 @@ WHERE jenis_anomaly IN ('pendukung_dominan', 'utama_kecil')
 ORDER BY total_pagu DESC;
 ```
 
+## 7.5 Anomali Koherensi 3 Level (Level 3 paling parah)
+```sql
+SELECT kementerian_kode, program_kode, kegiatan_kode, outputkro_kode,
+       prog_keg_coherence, keg_out_coherence,
+       out_komp_coherence, akun_komposisi_score,
+       coherence_score, anomaly_flags
+FROM ddac_coherence_2026
+WHERE JSON_CONTAINS(anomaly_flags, '"level3_akun_tidak_lazim"')
+ORDER BY akun_komposisi_score DESC
+LIMIT 20;
+```
+
 ---
 
 # 8. FILE INVENTORY
@@ -416,7 +525,14 @@ D:\Project\deepseek-kms\
 │   ├── 09_master_pipeline.py
 │   ├── 10_anomaly_detect.py
 │   ├── 11_treasurai_reasoning.py
-│   └── 12_coherence.py
+│   ├── 12_coherence.py
+│   ├── 13_coherence_levels.py
+│   ├── 14_fix_node_names.py
+│   ├── 08_extract_kl.py
+│   └── common\            (config.py, db.py, verdict.py)
+├── dashboard\
+│   ├── app.py             (FastAPI API)
+│   └── static\            (index.html, app.js, style.css)
 └── output\
     ├── batch_clean_log.txt
     └── extraction_logs\
@@ -435,11 +551,14 @@ D:\Project\deepseek-kms\
 | **Edges** | **0** ❌ | **699** ✅ |
 | **Embeddings** | **0** ❌ | **1,471** ✅ |
 | **AI Cleaned** | **0%** ❌ | **100%** ✅ |
-| **K/L Mapping** | **N/A** ❌ | **Ready** ✅ |
+| **K/L Mapping** | **N/A** ❌ | **585 penugasan** ✅ |
 | **Anomaly Detection** | **N/A** ❌ | **389 orphans with AI reasoning** ✅ |
+| **Coherence (3 level)** | **N/A** ❌ | **Level 1/2/3 + peer comparison** ✅ |
+| **Name Cleaning** | **N/A** ❌ | **856/891 nodes** ✅ |
+| **Dashboard** | **N/A** ❌ | **FastAPI + vis-network (5 tab)** ✅ |
 | **Hierarchy** | Flat list | Connected tree |
-| **Self-contained** | No | 12 scripts + 6 docs |
+| **Self-contained** | No | 14 scripts + dashboard + 6 docs |
 
 ---
 
-*Generated by Hermes Agent (DeepSeek) — 2026-06-07*
+*Generated by Hermes Agent (DeepSeek) — 2026-06-07 · diperbarui 2026-06-08*
