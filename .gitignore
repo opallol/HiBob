@@ -1,0 +1,15 @@
+# Secrets / credentials
+.env
+konfigurasi
+treasurai_config.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Output / logs
+output/
+*.log
