@@ -18,10 +18,17 @@ Design notes:
  * All heavy math is done in Python over the small distinct/aggregate sets, then
    written back to the 1.5M rows with a SINGLE indexed UPDATE...JOIN against a
    PK'd temp table (the only pattern that is fast at this scale).
+ * bge-m3 was chosen for multilingual support but under-estimates similarity
+   for Indonesian government/birokrasi/militer compound terms. PCT_LOW is set
+   conservatively (5th percentile) to minimize false positives on semantically
+   related Indonesian text that the model fails to capture.
 
 Usage:
   python scripts/13_coherence_levels.py
+  python scripts/13_coherence_levels.py --pct-low 3   # even stricter
+  python scripts/13_coherence_levels.py --peer-min 10  # require 10+ peers
 """
+import argparse
 import json
 import time
 import sys
@@ -32,10 +39,14 @@ sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else __file__
 from common.db import get_connection            # noqa: E402
 from common.config import EMBEDDING_MODEL       # noqa: E402
 
-# ---- thresholds / weights -------------------------------------------------
-PCT_LOW = 15            # percentile below which a similarity is "weak"
+# ---- defaults (override via CLI) ----------------------------------------
+PCT_LOW = 5             # percentile below which a similarity is "weak"
+                        # (was 15, lowered to 5 because bge-m3 underrates
+                        #  Indonesian government compound terms like
+                        #  "Infrastruktur Konektivitas"+"Pembangunan Jalan")
 PEER_MIN = 5            # min peer K/L to trust a peer profile
-DEV_FLAG = 0.40        # total-variation distance above which akun mix is unusual
+PEER_MIN_DETAIL = 3     # min peer K/L to include in detail table
+DEV_FLAG = 0.40         # total-variation distance above which akun mix is unusual
 W_JENIS, W_L1, W_L2, W_L3 = 0.35, 0.20, 0.20, 0.25
 
 CAT_LABELS = {
@@ -56,6 +67,28 @@ def robust_anom(sim, lo, hi):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="3-Level Coherence Detection")
+    parser.add_argument("--pct-low", type=float, default=PCT_LOW,
+                        help="Percentile below which similarity is weak")
+    parser.add_argument("--peer-min", type=int, default=PEER_MIN,
+                        help="Min peer K/L for L3 flag")
+    parser.add_argument("--peer-min-detail", type=int, default=PEER_MIN_DETAIL,
+                        help="Min peer K/L for detail table")
+    parser.add_argument("--dev-flag", type=float, default=DEV_FLAG,
+                        help="Total-variation threshold for L3 flag")
+    parser.add_argument("--model", type=str, default="LazarusNLP/all-indo-e5-small",
+                        help="SentenceTransformer model name (default: LazarusNLP/all-indo-e5-small)")
+    parser.add_argument("--query-prefix", type=str, default="query: ",
+                        help="Prefix prepended to each text before encoding (default: 'query: ' for e5)")
+    args = parser.parse_args()
+
+    pct_low = args.pct_low
+    peer_min = args.peer_min
+    peer_min_detail = args.peer_min_detail
+    dev_flag = args.dev_flag
+    model_name = args.model
+    query_prefix = args.query_prefix
+
     conn = get_connection()
     cur = conn.cursor()
     t0 = time.time()
@@ -63,14 +96,21 @@ def main():
     # =====================================================================
     # Load embedding model
     # =====================================================================
-    print("Loading embedding model %s ..." % EMBEDDING_MODEL)
+    print("=== 3-LEVEL COHERENCE DETECTION ===")
+    print("  pct_low=%d  peer_min=%d  dev_flag=%.2f" % (pct_low, peer_min, dev_flag))
+    print("  model=%s" % model_name)
+    print("  query_prefix=%r" % query_prefix)
+    print("  weights: jenis=%.2f L1=%.2f L2=%.2f L3=%.2f" % (W_JENIS, W_L1, W_L2, W_L3))
+    print()
+    print("Loading embedding model %s ..." % model_name)
     from sentence_transformers import SentenceTransformer
-    model = SentenceTransformer(EMBEDDING_MODEL)
+    model = SentenceTransformer(model_name)
     print("[%.0fs] model ready" % (time.time() - t0))
 
     def embed(texts):
+        prefixed = [query_prefix + t for t in texts] if query_prefix else list(texts)
         return model.encode(
-            texts, normalize_embeddings=True, batch_size=64,
+            prefixed, normalize_embeddings=True, batch_size=64,
             show_progress_bar=False, convert_to_numpy=True,
         ).astype(np.float32)
 
@@ -113,7 +153,7 @@ def main():
             pk[(kl, prog, keg)] = c
     sims1 = np.array(list(pk.values()), dtype=np.float64)
     lo1, hi1 = np.percentile(sims1, 5), np.percentile(sims1, 95)
-    thr1 = np.percentile(sims1, PCT_LOW)
+    thr1 = np.percentile(sims1, pct_low)
     print("[%.0fs]   %s prog-keg pairs | sim p5/p50/p95 = %.3f/%.3f/%.3f | weak<%.3f"
           % (time.time() - t0, format(len(pk), ","), lo1, np.percentile(sims1, 50), hi1, thr1))
 
@@ -132,7 +172,7 @@ def main():
             ko[(kl, prog, keg, out)] = c
     sims2 = np.array(list(ko.values()), dtype=np.float64)
     lo2, hi2 = np.percentile(sims2, 5), np.percentile(sims2, 95)
-    thr2 = np.percentile(sims2, PCT_LOW)
+    thr2 = np.percentile(sims2, pct_low)
     print("[%.0fs]   %s keg-out pairs | sim p5/p50/p95 = %.3f/%.3f/%.3f | weak<%.3f"
           % (time.time() - t0, format(len(ko), ","), lo2, np.percentile(sims2, 50), hi2, thr2))
 
@@ -175,6 +215,7 @@ def main():
 
     dev_map = {}      # combo -> deviation (0..1)
     detail_rows = []  # for ddac_coherence_akun_2026
+    n_detail_skipped = 0
     for combo, cats in own.items():
         out = combo[3]
         psh = peer_share.get(out)
@@ -195,8 +236,9 @@ def main():
              "own": round(osh.get(c, 0.0), 3), "peer": round(psh.get(c, 0.0), 3)}
             for c, d in unexpected if d > 0.15
         ][:3]
-        detail_rows.append((
-            combo[0], combo[1], combo[2], combo[3],
+        if pc >= peer_min_detail:
+            detail_rows.append((
+                combo[0], combo[1], combo[2], combo[3],
             round((1 - dev) * 100, 2), round(dev * 100, 2), pc,
             json.dumps({
                 "own": {c: round(s, 3) for c, s in sorted(osh.items())},
@@ -205,7 +247,12 @@ def main():
                 "top_unexpected": top_unexpected,
             }, ensure_ascii=False),
         ))
+        else:
+            n_detail_skipped += 1
     print("[%.0fs]   computed deviation for %s combos" % (time.time() - t0, format(len(dev_map), ",")))
+    print("[%.0fs]   detail rows: %s included, %s skipped (peer < %d)"
+          % (time.time() - t0, format(len(detail_rows), ","),
+             format(n_detail_skipped, ","), peer_min_detail))
 
     # =====================================================================
     # Build the single PK'd combo table that drives all UPDATEs
@@ -234,7 +281,7 @@ def main():
             flags.append("level1_program_kegiatan_lemah"); n_l1 += 1
         if sim2 is not None and sim2 < thr2:
             flags.append("level2_kegiatan_output_lemah"); n_l2 += 1
-        if dev is not None and pc >= PEER_MIN and dev >= DEV_FLAG:
+        if dev is not None and pc >= peer_min and dev >= dev_flag:
             flags.append("level3_akun_tidak_lazim"); n_l3 += 1
 
         rows.append((
@@ -340,6 +387,19 @@ def main():
         )
         cnt, pagu = cur.fetchone()
         print("  %-32s: %10s rows | Rp %.1f T" % (flag, format(cnt or 0, ","), (pagu or 0) / 1e12))
+
+    # embedding model diagnosis
+    print("\n--- embedding model diagnosis ---")
+    print("  model: %s" % model_name)
+    if "e5" in model_name.lower():
+        print("  NOTE: e5 model with query_prefix=%r" % query_prefix)
+        print("  Indonesian-specific fine-tune, better for birokrasi/militer terms.")
+    else:
+        print("  NOTE: bge-m3 is a multilingual model (1024-dim). It may under-estimate")
+        print("  similarity for Indonesian government/birokrasi/militer compound terms.")
+    print("  Current pct_low=%d balances coverage vs false positives." % pct_low)
+    print("  For stricter L1/L2, re-run with --pct-low 3")
+    print("  For more L1/L2 coverage, re-run with --pct-low 10")
 
     print("\n[%.0fs] Done. Tables: ddac_coherence_2026, ddac_coherence_akun_2026" % (time.time() - t0))
     conn.close()

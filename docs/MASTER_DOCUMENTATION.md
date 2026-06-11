@@ -2,7 +2,7 @@
 ## Master Documentation
 
 **Author:** DeepSeek via Hermes Agent
-**Date:** 2026-06-07 (terakhir diperbarui: 2026-06-08)
+**Date:** 2026-06-07 (terakhir diperbarui: 2026-06-09)
 **Project:** D:\Project\deepseek-kms
 **Database:** ddac2026 @ 172.16.2.153
 
@@ -249,7 +249,7 @@ Semua script di `D:\Project\deepseek-kms\scripts\`
 | 10 | anomaly_detect.py | pagu + KP vectors | ddac_anomaly_2026 | ✅ |
 | 11 | treasurai_reasoning.py | anomalies | llm_reasoning | ✅ |
 | 12 | coherence.py | pagu + t_kmpnen | ddac_coherence_2026 (jenis komponen) | ✅ |
-| 13 | coherence_levels.py | coherence + pagu | Level 1/2/3 + composite + peer detail | ✅ |
+| 13 | coherence_levels.py | coherence + pagu | Level 1/2/3 + composite + peer detail (v2: pct_low=5, peer_min=5, --cli-args) | ✅ |
 | 14 | fix_node_names.py | nodes | clean_node_name_ai (856 dibersihkan) | ✅ |
 
 > **Dashboard:** `dashboard/app.py` (FastAPI) + `dashboard/static/` (HTML/JS/CSS,
@@ -372,19 +372,29 @@ Koherensi internal kini dianalisis pada tiga tingkat hierarki anggaran:
 | 2. Kegiatan↔Output | Apakah output selaras dengan kegiatan? | cosine bge-m3 |
 | 3. Output↔Akun/Komponen | Apakah jenis belanja masuk akal untuk output ini? | peer comparison lintas K/L |
 
-**Hasil flag** (dari `anomaly_flags`):
-| Level | Baris tertandai | Pagu |
-|-------|-----------------|------|
-| Level 1 (program-kegiatan lemah) | 181,492 | Rp 171.6 T |
-| Level 2 (kegiatan-output lemah) | 85,067 | Rp 282.6 T |
-| Level 3 (komposisi akun tidak lazim) | 169,162 | Rp 194.8 T |
+**Hasil flag** (dari `anomaly_flags`, threshold pct_low=5, peer_min=5):
 
 **Inti Level 3 (peer comparison):** komposisi belanja sebuah output dibandingkan
-dengan rata-rata seluruh output berkode sama lintas K/L. Contoh nyata:
-- Output **"Layanan Dukungan Manajemen Internal" (EBA)** di Polri → **98% Belanja
-  Modal (akun 53)** padahal rata-rata 99 K/L peer ~0% modal → anomali.
-- Output **"Prasarana Konektivitas Darat (Jalan)" (RBC)** → **100% Belanja Barang
-  (akun 52)** vs peer 1% → anomali (semestinya Belanja Modal).
+dengan rata-rata seluruh output berkode sama lintas K/L. Contoh nyata dari data:
+- Output **"Bantuan Masyarakat" (QEA)** di Kemendikdasmen → **100% Belanja
+  Pegawai (akun 51)** padahal 7 K/L peer rata-rata 7% pegawai, 93% bansos → anomali.
+- Output **"Layanan Dukungan Manajemen Internal" (EBA)** di Polri → **100% Belanja
+  Barang (akun 52)** vs peer 99 K/L rata-rata 21% barang → anomali.
+- Output **"Bantuan Masyarakat" (QEA)** di Kemenkes → **96% Bansos (akun 57)** vs
+  peer 7 K/L rata-rata 19% → output bansos yang sewajarnya, tapi tetap flagged
+  karena komposisinya jauh di atas peer.
+
+**Inti Level 1 (program↔kegiatan, bge-m3 cosine):** mendeteksi pasangan program-
+kegiatan yang secara semantik tidak selaras. Contoh nyata:
+- KemenPU: **"Infrastruktur Konektivitas"** + **"Pembangunan Jalan Nasional"**
+  → cosine 38.4, padahal secara semantik sangat terkait (keterbatasan bge-m3).
+- Kemenkes: **"Sistem Ketahanan Kesehatan"** + **"Pengelolaan Farmasi"**
+  → cosine 45.6 — masih terkait tapi model kurang capture konteks birokrasi.
+
+> **Catatan:** bge-m3 adalah model multilingual 1024-dimensi. Model ini cenderung
+> *under-estimate* similarity untuk istilah majemuk bahasa Indonesia birokrasi/
+> militer. Threshold `pct_low=5` (persentil ke-5) dipilih untuk mengurangi false
+> positive. Untuk hasil lebih ketat, gunakan `--pct-low 3`.
 
 ## 5.5 Pembersihan Nama Simpul (NEW 2026-06-08)
 
@@ -497,7 +507,41 @@ LIMIT 20;
 
 ---
 
-# 8. FILE INVENTORY
+# 8. LIMITATIONS & CAVEATS
+
+## 8.1 bge-m3 Embedding Limitations
+
+Model `BAAI/bge-m3` (1024-dim) adalah model multilingual general-purpose.
+Model ini **tidak dilatih khusus** untuk dokumen pemerintah Indonesia sehingga:
+
+- Istilah majemuk seperti "Infrastruktur Konektivitas" + "Pembangunan Jalan
+  Nasional" dapat memiliki cosine similarity ~0.38 meskipun secara semantik
+  sangat terkait.
+- Singkatan birokrasi (TNI, EBA, FAN) tidak tertangkap konteksnya.
+- Konteks militer/pertahanan kurang terwakili dalam training data.
+
+**Rekomendasi perbaikan:** fine-tune bge-m3 dengan dokumen RPJMN/RKP/DIPA,
+atau gunakan model Indonesia-specific seperti `LazarusNLP/all-indo-e5-small`.
+
+## 8.2 Peer Comparison Caveats
+
+- **Peer count rendah (< 5):** beberapa output code hanya digunakan oleh 1-2
+  K/L, sehingga perbandingan statistik tidak bermakna. Detail table (`ddac_
+  coherence_akun_2026`) hanya memuat baris dengan `peer_count >= 3`.
+- **Kesamaan kode ≠ kesamaan makna:** kode output seperti "EBA" (Layanan
+  Dukungan Manajemen Internal) bersifat generik dan digunakan lintas K/L
+  dengan karakteristik berbeda — komposisi belanja wajar bervariasi.
+
+## 8.3 Data Duplication Note
+
+`ddac_pagu_akun_2026` memiliki 1.5M baris yang merupakan ekspansi dari ~62K
+kombinasi unik — setiap akun 6-digit menjadi baris terpisah. Agregasi di
+script 13 menggunakan `LEFT(akun_kode,2)` untuk mengelompokkan per kategori
+2-digit. Ini sudah benar dan tidak menyebabkan overcounting.
+
+---
+
+# 9. FILE INVENTORY
 
 ```
 D:\Project\deepseek-kms\
@@ -540,7 +584,7 @@ D:\Project\deepseek-kms\
 
 ---
 
-# 9. COMPARISON: DeepSeek vs Codex
+# 10. COMPARISON: DeepSeek vs Codex
 
 | Metric | Codex | DeepSeek |
 |--------|-------|----------|
@@ -551,9 +595,9 @@ D:\Project\deepseek-kms\
 | **Edges** | **0** ❌ | **699** ✅ |
 | **Embeddings** | **0** ❌ | **1,471** ✅ |
 | **AI Cleaned** | **0%** ❌ | **100%** ✅ |
-| **K/L Mapping** | **N/A** ❌ | **585 penugasan** ✅ |
+| **K/L Mapping** | **N/A** ❌ | **585 penugasan, 71 K/L** ✅ |
 | **Anomaly Detection** | **N/A** ❌ | **389 orphans with AI reasoning** ✅ |
-| **Coherence (3 level)** | **N/A** ❌ | **Level 1/2/3 + peer comparison** ✅ |
+| **Coherence (3 level)** | **N/A** ❌ | **Level 1/2/3 + peer comparison + detail table** ✅ |
 | **Name Cleaning** | **N/A** ❌ | **856/891 nodes** ✅ |
 | **Dashboard** | **N/A** ❌ | **FastAPI + vis-network (5 tab)** ✅ |
 | **Hierarchy** | Flat list | Connected tree |
@@ -561,4 +605,4 @@ D:\Project\deepseek-kms\
 
 ---
 
-*Generated by Hermes Agent (DeepSeek) — 2026-06-07 · diperbarui 2026-06-08*
+*Generated by Hermes Agent (DeepSeek) — 2026-06-07 · diperbarui 2026-06-09*
