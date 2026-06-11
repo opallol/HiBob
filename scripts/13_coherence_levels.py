@@ -5,8 +5,8 @@
 Populates the 3-level coherence detection model onto ddac_coherence_2026
 (built by 12_coherence.py). Runs IN PLACE -- does not rebuild the 1.5M-row table.
 
-  Level 1  Program <-> Kegiatan   : bge-m3 cosine similarity  -> prog_keg_coherence
-  Level 2  Kegiatan <-> Output    : bge-m3 cosine similarity  -> keg_out_coherence
+  Level 1  Program <-> Kegiatan   : e5-small cosine similarity -> prog_keg_coherence
+  Level 2  Kegiatan <-> Output    : e5-small cosine similarity -> keg_out_coherence
   Level 3  Output  <-> Akun       : peer comparison of belanja -> out_komp_coherence,
                                      akun_komposisi_score (+ detail table)
 
@@ -18,10 +18,10 @@ Design notes:
  * All heavy math is done in Python over the small distinct/aggregate sets, then
    written back to the 1.5M rows with a SINGLE indexed UPDATE...JOIN against a
    PK'd temp table (the only pattern that is fast at this scale).
- * bge-m3 was chosen for multilingual support but under-estimates similarity
-   for Indonesian government/birokrasi/militer compound terms. PCT_LOW is set
-   conservatively (5th percentile) to minimize false positives on semantically
-   related Indonesian text that the model fails to capture.
+ * LazarusNLP/all-indo-e5-small (Indonesian fine-tune, 384-dim) is used.
+   Under-estimates similarity for military/technical jargon; PCT_LOW is set
+   conservatively (5th percentile) and MILITARY_DOMAIN_KL {"012","060"}
+   combos are suppressed to minimize false positives on domain-specific text.
 
 Usage:
   python scripts/13_coherence_levels.py
@@ -30,6 +30,7 @@ Usage:
 """
 import argparse
 import json
+import os
 import time
 import sys
 
@@ -47,7 +48,40 @@ PCT_LOW = 5             # percentile below which a similarity is "weak"
 PEER_MIN = 5            # min peer K/L to trust a peer profile
 PEER_MIN_DETAIL = 3     # min peer K/L to include in detail table
 DEV_FLAG = 0.40         # total-variation distance above which akun mix is unusual
+DEV_FLAG_INTERNAL = 0.65  # looser threshold for internal support codes (EBA/EBB/EBC/EBD)
 W_JENIS, W_L1, W_L2, W_L3 = 0.35, 0.20, 0.20, 0.25
+
+# Output names too generic for the model to align against kegiatan —
+# suppress L2 flag to avoid false positives on semantically empty codes.
+GENERIC_OUTPUT_PATTERNS = [
+    'dukungan teknis', 'kerja sama', 'data dan informasi',
+    'dukungan manajemen', 'layanan perkantoran', 'layanan dukungan manajemen',
+    'administrasi umum', 'tata kelola',
+]
+
+# Fix F1 (2026-06-11): "Program Dukungan Manajemen" adalah catch-all resmi DIPA —
+# secara regulasi dirancang untuk menampung semua kegiatan administratif K/L,
+# sehingga kegiatan apapun di dalamnya sah dan tidak bisa di-flag L1.
+# Analog dengan GENERIC_OUTPUT_PATTERNS untuk L2.
+GENERIC_PROGRAM_PATTERNS = [
+    'dukungan manajemen',
+]
+
+# Fix E1 (2026-06-11): Kemhan (012) dan Polri (060) menggunakan jargon militer teknis
+# yang secara konsisten under-scored oleh model embedding:
+#   "Penggunaan Kekuatan" <-> "Operasi Bidang Pertahanan" → skor 4.20 (false positive).
+# Verifikasi: 17 distinct keg-out combos flagged di L2 untuk K/L 012+060;
+# combos dengan output domain pertahanan/keamanan operasional di bawah adalah FP.
+# Combos dengan output manajemen/koordinasi generik tetap di-flag (genuine anomali).
+MILITARY_DOMAIN_KL = {"012", "060"}
+MILITARY_DOMAIN_OUTPUT_PATTERNS = [
+    'operasi bidang pertahanan',
+    'operasi bidang keamanan',
+    'pemenuhan prioritas direktif presiden',
+    'om prasarana bidang pertahanan',
+    'sarana bidang pertahanan dan keamanan',
+    'sarana bidang pertahanan',
+]
 
 CAT_LABELS = {
     "51": "Belanja Pegawai", "52": "Belanja Barang", "53": "Belanja Modal",
@@ -103,14 +137,17 @@ def main():
     print("  weights: jenis=%.2f L1=%.2f L2=%.2f L3=%.2f" % (W_JENIS, W_L1, W_L2, W_L3))
     print()
     print("Loading embedding model %s ..." % model_name)
+    import torch
+    torch.set_num_threads(os.cpu_count() or 12)
     from sentence_transformers import SentenceTransformer
     model = SentenceTransformer(model_name)
-    print("[%.0fs] model ready" % (time.time() - t0))
+    print("[%.0fs] model ready (threads=%d)" % (time.time() - t0, torch.get_num_threads()))
 
     def embed(texts):
         prefixed = [query_prefix + t for t in texts] if query_prefix else list(texts)
+        # batch_size besar — hanya 2923 distinct texts, muat dalam 1-2 batch di RAM 33GB
         return model.encode(
-            prefixed, normalize_embeddings=True, batch_size=64,
+            prefixed, normalize_embeddings=True, batch_size=2048,
             show_progress_bar=False, convert_to_numpy=True,
         ).astype(np.float32)
 
@@ -147,10 +184,19 @@ def main():
         "program_uraian, kegiatan_uraian FROM ddac_coherence_2026"
     )
     pk = {}  # (kl,prog,keg) -> sim
+    generic_prog_combos = set()
     for kl, prog, keg, pu, ku in cur.fetchall():
         c = cos(pu, ku)
         if c is not None:
             pk[(kl, prog, keg)] = c
+        pu_lower = (pu or '').lower()
+        # Fix F1: Program Dukungan Manajemen adalah catch-all DIPA
+        if any(p in pu_lower for p in GENERIC_PROGRAM_PATTERNS):
+            generic_prog_combos.add((kl, prog, keg))
+        # Fix F2: Military K/L — model under-scores domain-specific terminology
+        # (sama dengan MILITARY_DOMAIN_KL yang sudah dipakai di L2 / Fix E1)
+        elif kl in MILITARY_DOMAIN_KL:
+            generic_prog_combos.add((kl, prog, keg))
     sims1 = np.array(list(pk.values()), dtype=np.float64)
     lo1, hi1 = np.percentile(sims1, 5), np.percentile(sims1, 95)
     thr1 = np.percentile(sims1, pct_low)
@@ -166,10 +212,28 @@ def main():
         "kegiatan_uraian, outputkro_uraian FROM ddac_coherence_2026"
     )
     ko = {}  # (kl,prog,keg,out) -> sim
+    generic_out_combos = set()
     for kl, prog, keg, out, ku, ou in cur.fetchall():
         c = cos(ku, ou)
         if c is not None:
             ko[(kl, prog, keg, out)] = c
+        ou_lower = (ou or '').lower()
+        # Fix F3: EB-series output codes (EBA/EBB/EBC/EBD) adalah output
+        # internal/rutin per klasifikasi resmi Kemenkeu — konsisten dengan
+        # script 10 yang mengklasifikasikan EB sebagai routine_support.
+        # Catatan: L3 tetap bisa mendeteksi anomali komposisi akun pada output EB.
+        if out and out.upper().startswith('EB'):
+            generic_out_combos.add((kl, prog, keg, out))
+        # Generic outputs: model cannot score these against kegiatan
+        elif any(p in ou_lower for p in GENERIC_OUTPUT_PATTERNS):
+            generic_out_combos.add((kl, prog, keg, out))
+        # Fix E1: military/defense K/L with operational defense outputs —
+        # model consistently under-scores these due to technical jargon mismatch.
+        # Only suppress outputs that are clearly in the defense/security operational
+        # domain; generic management outputs under defense kegiatan are kept.
+        elif (kl in MILITARY_DOMAIN_KL
+              and any(p in ou_lower for p in MILITARY_DOMAIN_OUTPUT_PATTERNS)):
+            generic_out_combos.add((kl, prog, keg, out))
     sims2 = np.array(list(ko.values()), dtype=np.float64)
     lo2, hi2 = np.percentile(sims2, 5), np.percentile(sims2, 95)
     thr2 = np.percentile(sims2, pct_low)
@@ -181,7 +245,7 @@ def main():
     # =====================================================================
     print("\n[%.0fs] LEVEL 3: output<->akun peer comparison" % (time.time() - t0))
 
-    # Peer profile: category share per output code aggregated across ALL K/L.
+    # Peer profile: global category totals across ALL K/L (raw pagu, not shares).
     cur.execute(
         "SELECT outputkro_kode, LEFT(akun_kode,2) cat, CAST(SUM(total_pagu) AS DOUBLE) "
         "FROM ddac_pagu_akun_2026 WHERE total_pagu > 0 GROUP BY outputkro_kode, LEFT(akun_kode,2)"
@@ -194,12 +258,18 @@ def main():
         "FROM ddac_pagu_akun_2026 WHERE total_pagu > 0 GROUP BY outputkro_kode"
     )
     peer_count = {out: n for out, n in cur.fetchall()}
-    peer_share = {}
-    for out, cats in peer_cat.items():
-        tot = sum(cats.values())
-        if tot > 0:
-            peer_share[out] = {c: v / tot for c, v in cats.items()}
-    print("[%.0fs]   peer profiles for %s output codes" % (time.time() - t0, format(len(peer_share), ",")))
+
+    # Fix 3A: Per-KL contribution to each output's totals (for self-exclusion).
+    cur.execute(
+        "SELECT outputkro_kode, kementerian_kode, LEFT(akun_kode,2) cat, "
+        "CAST(SUM(total_pagu) AS DOUBLE) "
+        "FROM ddac_pagu_akun_2026 WHERE total_pagu > 0 "
+        "GROUP BY outputkro_kode, kementerian_kode, LEFT(akun_kode,2)"
+    )
+    kl_contrib = {}  # (out, kl) -> {cat: pagu}
+    for out, kl, cat, pagu in cur.fetchall():
+        kl_contrib.setdefault((out, kl), {})[cat] = pagu
+    print("[%.0fs]   peer profiles for %s output codes" % (time.time() - t0, format(len(peer_cat), ",")))
 
     # Own profile per (kl,prog,keg,out)
     cur.execute(
@@ -213,20 +283,33 @@ def main():
         own.setdefault((kl, prog, keg, out), {})[cat] = pagu
     print("[%.0fs]   own profiles for %s combos" % (time.time() - t0, format(len(own), ",")))
 
-    dev_map = {}      # combo -> deviation (0..1)
-    detail_rows = []  # for ddac_coherence_akun_2026
+    dev_map = {}            # combo -> deviation (0..1)
+    adjusted_pc_map = {}    # combo -> peer count excluding self (Fix 3A)
+    detail_rows = []
     n_detail_skipped = 0
     for combo, cats in own.items():
-        out = combo[3]
-        psh = peer_share.get(out)
-        pc = peer_count.get(out, 0)
+        kl, prog, keg, out = combo
+        pcat_global = peer_cat.get(out)
+        pc_total = peer_count.get(out, 0)
         tot = sum(cats.values())
-        if not psh or tot <= 0:
+        if not pcat_global or tot <= 0:
             continue
+
+        # Fix 3A: subtract own K/L from global peer aggregate
+        own_kl = kl_contrib.get((out, kl), {})
+        pcat_others = {c: max(0.0, pcat_global.get(c, 0.0) - own_kl.get(c, 0.0))
+                       for c in pcat_global}
+        others_total = sum(pcat_others.values())
+        pc = max(0, pc_total - 1)  # peer count excluding self
+        if others_total <= 0:
+            continue  # this K/L is the only one for this output — no peer to compare
+        psh = {c: v / others_total for c, v in pcat_others.items() if v > 0}
+
         osh = {c: v / tot for c, v in cats.items()}
         allcats = set(osh) | set(psh)
         dev = 0.5 * sum(abs(osh.get(c, 0.0) - psh.get(c, 0.0)) for c in allcats)
         dev_map[combo] = dev
+        adjusted_pc_map[combo] = pc
         unexpected = sorted(
             ((c, osh.get(c, 0.0) - psh.get(c, 0.0)) for c in allcats),
             key=lambda x: x[1], reverse=True,
@@ -239,14 +322,14 @@ def main():
         if pc >= peer_min_detail:
             detail_rows.append((
                 combo[0], combo[1], combo[2], combo[3],
-            round((1 - dev) * 100, 2), round(dev * 100, 2), pc,
-            json.dumps({
-                "own": {c: round(s, 3) for c, s in sorted(osh.items())},
-                "peer": {c: round(s, 3) for c, s in sorted(psh.items())},
-                "deviation": round(dev, 3), "peer_count": pc,
-                "top_unexpected": top_unexpected,
-            }, ensure_ascii=False),
-        ))
+                round((1 - dev) * 100, 2), round(dev * 100, 2), pc,
+                json.dumps({
+                    "own": {c: round(s, 3) for c, s in sorted(osh.items())},
+                    "peer": {c: round(s, 3) for c, s in sorted(psh.items())},
+                    "deviation": round(dev, 3), "peer_count": pc,
+                    "top_unexpected": top_unexpected,
+                }, ensure_ascii=False),
+            ))
         else:
             n_detail_skipped += 1
     print("[%.0fs]   computed deviation for %s combos" % (time.time() - t0, format(len(dev_map), ",")))
@@ -265,10 +348,11 @@ def main():
         sim1 = pk.get((kl, prog, keg))
         sim2 = ko.get((kl, prog, keg, out))
         dev = dev_map.get((kl, prog, keg, out))
-        pc = peer_count.get(out, 0)
+        # Fix 3A: use adjusted peer count (self-excluded)
+        pc = adjusted_pc_map.get((kl, prog, keg, out), peer_count.get(out, 0))
 
         l1_coh = round(sim1 * 100, 2) if sim1 is not None else None
-        l2_coh = round(sim2 * 100, 2) if sim2 is not None else None
+        l2_coh = round(max(0.0, sim2) * 100, 2) if sim2 is not None else None
         l3_coh = round((1 - dev) * 100, 2) if dev is not None else None
         l3_score = round(dev * 100, 2) if dev is not None else None
 
@@ -277,11 +361,15 @@ def main():
         l3_anom = (dev * 100.0) if dev is not None else 0.0
 
         flags = []
-        if sim1 is not None and sim1 < thr1:
+        if (sim1 is not None and sim1 < thr1
+                and (kl, prog, keg) not in generic_prog_combos):
             flags.append("level1_program_kegiatan_lemah"); n_l1 += 1
-        if sim2 is not None and sim2 < thr2:
+        if (sim2 is not None and sim2 < thr2
+                and (kl, prog, keg, out) not in generic_out_combos):
             flags.append("level2_kegiatan_output_lemah"); n_l2 += 1
-        if dev is not None and pc >= peer_min and dev >= dev_flag:
+        # Fix 3B: higher threshold for internal support output codes (EBA/EBB/EBC/EBD)
+        l3_thr = DEV_FLAG_INTERNAL if out.startswith("EB") else dev_flag
+        if dev is not None and pc >= peer_min and dev >= l3_thr:
             flags.append("level3_akun_tidak_lazim"); n_l3 += 1
 
         rows.append((
@@ -386,7 +474,14 @@ def main():
             "WHERE JSON_CONTAINS(anomaly_flags, %s)", (json.dumps(flag),)
         )
         cnt, pagu = cur.fetchone()
-        print("  %-32s: %10s rows | Rp %.1f T" % (flag, format(cnt or 0, ","), (pagu or 0) / 1e12))
+        cur.execute(
+            "SELECT COUNT(DISTINCT kementerian_kode, program_kode, kegiatan_kode) "
+            "FROM ddac_coherence_2026 WHERE JSON_CONTAINS(anomaly_flags, %s)",
+            (json.dumps(flag),)
+        )
+        uniq = cur.fetchone()[0] or 0
+        print("  %-32s: %10s rows | %6s unik (kl,prog,keg) | Rp %.1f T"
+              % (flag, format(cnt or 0, ","), format(uniq, ","), (pagu or 0) / 1e12))
 
     # embedding model diagnosis
     print("\n--- embedding model diagnosis ---")

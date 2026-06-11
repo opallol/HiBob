@@ -2,13 +2,20 @@
 ## Master Documentation
 
 **Author:** DeepSeek via Hermes Agent
-**Date:** 2026-06-07 (terakhir diperbarui: 2026-06-09)
+**Date:** 2026-06-07 (terakhir diperbarui: 2026-06-11)
 **Project:** D:\Project\deepseek-kms
 **Database:** ddac2026 @ 172.16.2.153
 
 > **Update 2026-06-08:** Pipeline kini lengkap end-to-end — K/L mapping (08),
 > koherensi 3 level (13), pembersihan nama simpul (14), dan dashboard interaktif
 > (FastAPI + vis-network). Lihat Bagian 5.4–5.6 untuk hasil terbaru.
+>
+> **Update 2026-06-11:** Tuning presisi menyeluruh — model anomaly diganti ke
+> LazarusNLP/all-indo-e5-small, klasifikasi routine dipindah ke kode resmi EB/DM,
+> KB nodes dibersihkan (9 false PN + spillover KP + canonical PN names), ABS_FLOOR
+> diturunkan 50→45. Coherence L1 false positive dibersihkan: Program DM + military K/L
+> di-suppress (135→30 combos). L2 EB-series output di-suppress (F3). Lihat Bagian 5.2
+> dan 5.4 untuk distribusi terkini.
 
 ---
 
@@ -47,9 +54,10 @@ secara multi-dimensi.
               ▼            ▼            ▼
          deepseek_     ddac_pagu_    t_kmpnen_
          policy_*      akun_2026     2026
-         (891 nodes,   (1.5M rows)   (96K rows)
-          699 edges,
-          971 emb)
+         (963 nodes,   (1.5M rows)   (96K rows)
+          857 edges,
+          e5-small
+          runtime)
               │            │            │
               └────────────┼────────────┘
                            │
@@ -58,12 +66,12 @@ secara multi-dimensi.
               ▼            │            ▼
          Policy          │         Internal
          Alignment       │         Coherence
-         (bge-m3 cosine) │         (rule-based)
+         (e5-small cos.) │         (rule-based)
               │            │            │
               ▼            │            ▼
          ddac_             │         ddac_
          anomaly_2026      │         coherence_2026
-         (389 orphans)     │
+         (1 orphan+1541 weak) │
               │            │
               ▼            │
          TreasuryAI        │
@@ -106,7 +114,7 @@ Teks mentah per halaman PDF.
 | raw_text | Teks hasil ekstraksi PyMuPDF |
 | clean_text | Teks setelah AI cleaning |
 
-### deepseek_policy_chunks (990 rows)
+### deepseek_policy_chunks (1,001 rows; 990 AI-cleaned)
 Potongan teks untuk processing LLM.
 
 | Column | Desc |
@@ -116,8 +124,9 @@ Potongan teks untuk processing LLM.
 | level_hint | PN / PP / KP / TEXT / KL_MATRIX |
 | oc_text | 1 jika perlu OCR correction |
 
-### deepseek_policy_nodes (891 rows)
-Entitas perencanaan (PN, PP, KP).
+### deepseek_policy_nodes (963 rows)
+Entitas perencanaan (PN, PP, KP). Komposisi: 43 PN + 167 PP + 753 KP.
+9 false PN (nomor halaman PDF) dan 5 PP anak-nya telah dihapus (2026-06-11).
 
 | Column | Desc |
 |--------|------|
@@ -127,7 +136,7 @@ Entitas perencanaan (PN, PP, KP).
 | node_name | Nama entitas (AI-cleaned) |
 | parent_code | Kode parent untuk edge building |
 
-### deepseek_policy_edges (699 rows)
+### deepseek_policy_edges (857 rows)
 Hierarchy tree PN→PP→KP.
 
 | Column | Desc |
@@ -136,13 +145,17 @@ Hierarchy tree PN→PP→KP.
 | child_node_id | FK ke nodes |
 | edge_type | HAS_PP / HAS_KP |
 
-### deepseek_policy_embeddings (971 rows)
-bge-m3 vector embeddings (1024 dimensi).
+### deepseek_policy_embeddings (tabel legacy, tidak aktif)
+Tabel ini menyimpan bge-m3 vector (1024 dimensi) yang dihasilkan script 07.
+**Tidak digunakan lagi oleh pipeline aktif.** Script 10 kini meng-embed ulang
+`clean_node_name_ai` (atau `node_name`) secara runtime menggunakan model
+`LazarusNLP/all-indo-e5-small` (384 dimensi, Indonesian-specific fine-tune)
+dengan prefix `"query: "`. Pendekatan runtime menghindari stale embeddings.
 
 | Column | Desc |
 |--------|------|
 | object_type | 'node' |
-| model | BAAI/bge-m3 |
+| model | BAAI/bge-m3 (legacy) |
 | dims | 1024 |
 | vector | float32 binary blob |
 
@@ -161,9 +174,11 @@ Agregasi dari ringkasan_pagu_2026 (4.4M rows) ke level akun.
 | alignment_text | program+kegiatan+output (for KP matching) |
 | scope_text | fungsi+subfungsi+program+kegiatan+output |
 
-## 2.3 ddac_pagu_vectors — Embedding Cache (7,235 rows)
+## 2.3 ddac_pagu_vectors — Embedding Cache (7,235 rows, legacy)
 
 bge-m3 vectors untuk setiap unique alignment_text.
+**Tidak digunakan lagi oleh pipeline aktif.** Script 10 kini meng-embed alignment_text
+secara runtime menggunakan e5-small. Tabel ini adalah sisa dari versi bge-m3 sebelumnya.
 
 ## 2.4 ddac_anomaly_2026 — Policy Alignment Results (7,235 rows)
 
@@ -191,15 +206,23 @@ Deteksi anomali struktur internal DIPA secara **3 level** (semua kolom kini teri
 | jenis_komponen | Utama / Pendukung / none (dari t_kmpnen_2026) |
 | jenis_anomaly | pendukung_dominan / utama_kecil / unclassified / normal |
 | jenis_anomaly_score | Severity score (0-100) |
-| prog_keg_coherence | **Level 1** Program↔Kegiatan cosine bge-m3 (×100) ✅ |
-| keg_out_coherence | **Level 2** Kegiatan↔Output cosine bge-m3 (×100) ✅ |
+| prog_keg_coherence | **Level 1** Program↔Kegiatan cosine e5-small (×100) ✅ |
+| keg_out_coherence | **Level 2** Kegiatan↔Output cosine e5-small (×100) ✅ |
 | out_komp_coherence | **Level 3** keselarasan komposisi akun (100 − deviasi) ✅ |
 | akun_komposisi_score | **Level 3** skor anomali komposisi belanja (0-100) ✅ |
 | coherence_score | Composite: 0.35·jenis + 0.20·L1 + 0.20·L2 + 0.25·L3 |
 | anomaly_flags | JSON daftar level yang terpicu (mis. `["level3_akun_tidak_lazim"]`) |
 
-Threshold flag: L1/L2 dipicu bila similarity < persentil-15 distribusinya;
-L3 dipicu bila `peer_count >= 5` dan deviasi komposisi >= 0.40.
+Threshold flag: L1/L2 dipicu bila similarity < persentil-5 distribusinya
+(model e5-small, prefix "query: "). Suppression rules:
+- **L1**: skip jika program mengandung `'dukungan manajemen'` (catch-all DIPA resmi)
+  atau K/L militer (012=Kemhan, 060=Polri) — model tidak bisa capture jargon domain spesifik.
+- **L2**: skip jika output name cocok `GENERIC_OUTPUT_PATTERNS` (dukungan teknis,
+  kerja sama, dll.), atau output kode `EB%` (EBA/EBB/EBC/EBD = internal/rutin per
+  Kemenkeu), atau K/L militer dengan output operasional pertahanan/keamanan (Fix E1).
+- **L3**: dipicu bila `peer_count >= 5` dan deviasi >= 0.40 (atau >= 0.65 untuk
+  output internal EB-series). Self-exclusion diterapkan: peer profile dihitung tanpa
+  kontribusi K/L itu sendiri.
 
 ## 2.6 ddac_coherence_akun_2026 — Level-3 Peer Detail (~8K rows)
 
@@ -217,7 +240,7 @@ Detail perbandingan komposisi belanja per output terhadap **peer lintas K/L**
 `top_unexpected` memuat kategori akun 2-digit yang share-nya jauh di atas peer,
 mis. `{"akun":"53","label":"Belanja Modal","own":0.98,"peer":0.00}`.
 
-## 2.7 deepseek_policy_kl_assignments — K/L Mapping (585 rows)
+## 2.7 deepseek_policy_kl_assignments — K/L Mapping (604 rows)
 
 Pemetaan KP → K/L pelaksana (dari Matriks Lampiran III RPJMN/RKP).
 
@@ -240,14 +263,16 @@ Semua script di `D:\Project\deepseek-kms\scripts\`
 | 01 | create_schema.py | - | 9 deepseek_policy_* tables | ✅ |
 | 02 | extract_pages.py | 17 PDFs | pages + documents | ✅ |
 | 03 | chunk_and_clean.py | pages | chunks | ✅ |
-| 03b | ai_clean.py | chunks | clean_text_ai | ✅ |
+| 03b | ai_clean.py | chunks | clean_text_ai (deprecated) | ✅ |
+| 03c | batch_clean.py | chunks | clean_text_ai (produksi, 990/1001 chunks cleaned) | ✅ |
 | 04 | extract_nodes.py | clean chunks | nodes (PN/PP/KP) | ✅ |
 | 05 | build_edges.py | nodes | edges (hierarchy) | ✅ |
 | 07 | generate_embeddings.py | nodes | bge-m3 embeddings | ✅ |
 | 08 | extract_kl.py | KL_MATRIX chunks | kl_assignments (585) | ✅ |
 | 09 | master_pipeline.py | all above | final nodes+edges+emb | ✅ |
-| 10 | anomaly_detect.py | pagu + KP vectors | ddac_anomaly_2026 | ✅ |
-| 11 | treasurai_reasoning.py | anomalies | llm_reasoning | ✅ |
+| 10 | anomaly_detect.py | pagu + KP (e5-small runtime) | ddac_anomaly_2026 (1 orphan, 1,541 weak) | ✅ |
+| 11 | treasurai_reasoning.py | anomalies | llm_reasoning (389 items) | ✅ |
+| 13b | 13_apply_verdicts.py | TreasurAI JSON | treasurai_verdict | ✅ |
 | 12 | coherence.py | pagu + t_kmpnen | ddac_coherence_2026 (jenis komponen) | ✅ |
 | 13 | coherence_levels.py | coherence + pagu | Level 1/2/3 + composite + peer detail (v2: pct_low=5, peer_min=5, --cli-args) | ✅ |
 | 14 | fix_node_names.py | nodes | clean_node_name_ai (856 dibersihkan) | ✅ |
@@ -274,7 +299,7 @@ cd D:\Project\deepseek-kms
 python scripts\01_create_schema.py
 python scripts\02_extract_pages.py
 python scripts\03_chunk_and_clean.py
-python scripts\03b_ai_clean.py
+python scripts\03c_batch_clean.py
 python scripts\04_extract_nodes.py
 python scripts\05_build_edges.py
 python scripts\07_generate_embeddings.py
@@ -315,10 +340,12 @@ Keselarasan (filter + CSV + reasoning TreasurAI), Anomali Koherensi (filter leve
 
 ## 5.1 Knowledge Graph
 
-- **891 planning nodes** (16 PN + 137 PP + 738 KP)
-- **699 edges** — first-ever connected RPJMN/RKP hierarchy tree
-- **971 bge-m3 embeddings** — ready for semantic search
-- **990/990 chunks** AI-cleaned (100% OCR correction)
+- **963 planning nodes** (43 PN + 167 PP + 753 KP)
+- **857 edges** — connected RPJMN/RKP hierarchy tree (PN→PP→KP)
+- **e5-small runtime embeddings** — di-embed ulang setiap run dari `clean_node_name_ai`
+- **990/1,001 chunks** AI-cleaned (11 chunks tidak butuh cleaning)
+- Node names fully cleaned: 9 false PN (nomor halaman PDF) dihapus, spillover KP
+  diperbaiki, semua PN 01-08 diberi canonical name RPJMN resmi
 
 ### Sample Hierarchy:
 ```
@@ -332,25 +359,27 @@ PN 01: Memperkokoh Ideologi Pancasila, Demokrasi, dan HAM
     KP 01.02.02: Penguatan Sistem Komunikasi
 ```
 
-## 5.2 Policy Anomaly Detection
+## 5.2 Policy Alignment Detection
 
-- **7,235 unique alignment texts** embedded with bge-m3
-- **Cosine similarity** vs 410 KP nodes
-- **389 policy orphans** detected (Rp 454.9 T)
-- **TreasuryAI OSS 20B** reasoning on all 389 orphans
+- **7,235 unique alignment texts** — grain (K/L, program, kegiatan)
+- **Model:** LazarusNLP/all-indo-e5-small (384-dim, Indonesian fine-tune), runtime embed
+- **Klasifikasi berbasis kode resmi:** output `EB%` = routine_support,
+  program `Dukungan Manajemen` = routine_support (bukan keyword mining)
+- **ABS_FLOOR = 45** — semua item dengan skor < 45 dinyatakan policy_orphan
 
-### TreasuryAI Classification (389 orphans):
-| Classification | Count | % |
-|---------------|-------|---|
-| Valid Anomaly | 101 | 26% |
-| False Positive | 238 | 61% |
-| Mixed/Unclear | 50 | 13% |
+### Distribusi Anomaly (terkini):
+| anomaly_type | spending_nature | Rows | Pagu |
+|-------------|----------------|------|------|
+| aligned | substantive | 2,747 | Rp 83.0 T |
+| weak_alignment | substantive | 1,541 | Rp 152.1 T |
+| routine | routine_support | 2,905 | Rp 8.3 T |
+| routine | treasury_crosscutting | 41 | Rp 564.9 T |
+| policy_orphan | substantive | **1** | Rp 0.0 T |
 
-### Top Valid Anomalies:
-1. **BAUN - Subsidi Pupuk** → matched ke "Aplikasi & Gim" (jelas mismatch)
-2. **Kemensos - Bansos Sembako** → matched ke "Resiliensi Bencana"
-3. **Kemenhan - Non-Alutsista** → matched ke "Pemeliharaan Alutsista"
-4. **BAUN - Utang Negara** → cross-cutting treasury function
+Policy orphan tersisa 1 item: ESDM kegiatan kecil, skor 44.47 — genuine orphan.
+Item Rp 4.21T "Wajib Belajar 13 Tahun" (Kemendikdasmen) sebelumnya false orphan
+karena nomenklatur DIPA ≠ nama KP RPJMN; setelah ABS_FLOOR diturunkan 50→45
+ter-reklasifikasi sebagai weak_alignment (skor 47, KP 04.01.01).
 
 ## 5.3 AI Cleaning Quality
 
@@ -368,33 +397,41 @@ Koherensi internal kini dianalisis pada tiga tingkat hierarki anggaran:
 
 | Level | Cek | Basis |
 |-------|-----|-------|
-| 1. Program↔Kegiatan | Apakah kegiatan selaras dengan program? | cosine bge-m3 |
-| 2. Kegiatan↔Output | Apakah output selaras dengan kegiatan? | cosine bge-m3 |
+| 1. Program↔Kegiatan | Apakah kegiatan selaras dengan program? | cosine e5-small |
+| 2. Kegiatan↔Output | Apakah output selaras dengan kegiatan? | cosine e5-small |
 | 3. Output↔Akun/Komponen | Apakah jenis belanja masuk akal untuk output ini? | peer comparison lintas K/L |
 
 **Hasil flag** (dari `anomaly_flags`, threshold pct_low=5, peer_min=5):
 
+| Level | Unique combos | Pagu | Keterangan |
+|-------|--------------|------|------------|
+| L1 program↔kegiatan | **30** | Rp 1.1 T | 135→30 setelah suppress DM+militer |
+| L2 kegiatan↔output | **200** | Rp 4.5 T | 217→200 setelah suppress EB+militer |
+| L3 akun composition | **895** | Rp 420.0 T | threshold EB=0.65, substantif=0.40 |
+
+Avg coherence scores: L1=51.7 · L2=46.8 · L3=79.9 · composite=28.7
+
+**Genuine L1 anomalies tersisa (sample, diverifikasi dari DB):**
+- KL 147 EK/7824 "Peningkatan Hubungan Antar Lembaga Internasional" ↔ "Program
+  Pariwisata" — L1=7.2, hubungan internasional ≠ pariwisata
+- KL 153 EH/8123 "Hubungan Kelembagaan" ↔ "Program Pengembangan Kawasan
+  Strategis" — L1=14.4, kelembagaan non-spasial ≠ kawasan strategis
+- KL 141 DC/8102 "Pengelolaan Data dan Informasi" ↔ "Program Kerukunan Umat"
+  — L1=19.5, data management ≠ kerukunan beragama
+
 **Inti Level 3 (peer comparison):** komposisi belanja sebuah output dibandingkan
 dengan rata-rata seluruh output berkode sama lintas K/L. Contoh nyata dari data:
-- Output **"Bantuan Masyarakat" (QEA)** di Kemendikdasmen → **100% Belanja
-  Pegawai (akun 51)** padahal 7 K/L peer rata-rata 7% pegawai, 93% bansos → anomali.
+- Output **"Bantuan Masyarakat" (QEA)** di BGN (MBG) → Rp 197T, 100% transfer
+  vs peer yang lebih beragam → flagged karena program baru tanpa historical peer.
 - Output **"Layanan Dukungan Manajemen Internal" (EBA)** di Polri → **100% Belanja
-  Barang (akun 52)** vs peer 99 K/L rata-rata 21% barang → anomali.
-- Output **"Bantuan Masyarakat" (QEA)** di Kemenkes → **96% Bansos (akun 57)** vs
-  peer 7 K/L rata-rata 19% → output bansos yang sewajarnya, tapi tetap flagged
-  karena komposisinya jauh di atas peer.
+  Barang (akun 52)** vs peer 99 K/L rata-rata 21% barang → genuine anomali.
+- KL 024 keg=7958/EBA "Pelayanan Kesehatan Lanjutan" — kegiatan substantif
+  RS vertikal Kemenkes menggunakan output kode internal EBA — flagged L3.
 
-**Inti Level 1 (program↔kegiatan, bge-m3 cosine):** mendeteksi pasangan program-
-kegiatan yang secara semantik tidak selaras. Contoh nyata:
-- KemenPU: **"Infrastruktur Konektivitas"** + **"Pembangunan Jalan Nasional"**
-  → cosine 38.4, padahal secara semantik sangat terkait (keterbatasan bge-m3).
-- Kemenkes: **"Sistem Ketahanan Kesehatan"** + **"Pengelolaan Farmasi"**
-  → cosine 45.6 — masih terkait tapi model kurang capture konteks birokrasi.
-
-> **Catatan:** bge-m3 adalah model multilingual 1024-dimensi. Model ini cenderung
-> *under-estimate* similarity untuk istilah majemuk bahasa Indonesia birokrasi/
-> militer. Threshold `pct_low=5` (persentil ke-5) dipilih untuk mengurangi false
-> positive. Untuk hasil lebih ketat, gunakan `--pct-low 3`.
+> **Catatan:** Model e5-small (Indonesian fine-tune, 384-dim) lebih akurat dari
+> bge-m3 untuk istilah birokrasi Indonesia. Threshold `pct_low=5` (persentil ke-5)
+> dipilih untuk mengurangi false positive. Untuk hasil lebih ketat, gunakan
+> `--pct-low 3`.
 
 ## 5.5 Pembersihan Nama Simpul (NEW 2026-06-08)
 
@@ -403,13 +440,20 @@ kegiatan yang secara semantik tidak selaras. Contoh nyata:
 line-break. Script `14_fix_node_names.py` membersihkannya secara deterministik ke
 kolom `clean_node_name_ai` (non-destruktif): potong ke nama asli sebelum penanda
 sasaran `NN -`, pisah camelCase (`HakAsasi`→`Hak Asasi`) dan kata sambung yang
-menempel (`Abadidan`→`Abadi dan`). **856/891 nama dibersihkan.** Dashboard memakai
-`COALESCE(clean_node_name_ai, node_name)`.
+menempel (`Abadidan`→`Abadi dan`).
+
+**Hasil terkini (963 nodes):**
+- **753 KP**: `clean_node_name_ai` terisi 100% (AI-cleaned + Fix C1/C2)
+- **43 PN**: `clean_node_name_ai` terisi 100% (canonical names RPJMN resmi)
+- **167 PP**: `clean_node_name_ai` NULL — menggunakan `node_name` langsung.
+  PP names dari dokumen RPJMN umumnya sudah bersih (nama program resmi).
+
+Dashboard memakai `COALESCE(clean_node_name_ai, node_name)` untuk semua 963 nodes.
 
 ## 5.6 K/L Institutional Mapping (NEW)
 
 Script `08_extract_kl.py` memetakan KP → K/L pelaksana dari Matriks Lampiran III:
-**585 penugasan** (355 simpul KP/PP, 71 K/L), confidence 582@0.9 / 3@0.6.
+**604 penugasan** (362 simpul KP/PP, 72 K/L), confidence mayoritas @0.9.
 
 ---
 
@@ -432,13 +476,16 @@ Purpose: AI OCR cleaning (Phase 3b)
 Config:  .env file with DEEPSEEK_API_KEY
 ```
 
-## 6.3 bge-m3 Embeddings
+## 6.3 bge-m3 Embeddings (legacy — tidak aktif)
 
 ```
-Model:    BAAI/bge-m3 (1024 dimensions)
-Purpose:  Semantic similarity (local, no API)
+Model:    BAAI/bge-m3 (1024 dimensions)  [LEGACY — tidak digunakan]
+Replaced: LazarusNLP/all-indo-e5-small (384-dim, runtime, Indonesian fine-tune)
 Cache:    ~/.cache/huggingface/hub/models--BAAI--bge-m3
 ```
+
+Model aktif untuk semua embedding (script 10 dan 13) adalah **e5-small**,
+di-embed ulang setiap run sehingga vector space selalu konsisten.
 
 ---
 
@@ -509,19 +556,23 @@ LIMIT 20;
 
 # 8. LIMITATIONS & CAVEATS
 
-## 8.1 bge-m3 Embedding Limitations
+## 8.1 e5-small Embedding Notes
 
-Model `BAAI/bge-m3` (1024-dim) adalah model multilingual general-purpose.
-Model ini **tidak dilatih khusus** untuk dokumen pemerintah Indonesia sehingga:
+Model aktif: `LazarusNLP/all-indo-e5-small` (384-dim, Indonesian fine-tune dari
+multilingual-e5-small). Model ini **lebih akurat** untuk istilah birokrasi Indonesia
+dibandingkan bge-m3 (1024-dim, multilingual general-purpose) yang sebelumnya digunakan.
 
-- Istilah majemuk seperti "Infrastruktur Konektivitas" + "Pembangunan Jalan
-  Nasional" dapat memiliki cosine similarity ~0.38 meskipun secara semantik
-  sangat terkait.
-- Singkatan birokrasi (TNI, EBA, FAN) tidak tertangkap konteksnya.
-- Konteks militer/pertahanan kurang terwakili dalam training data.
+Keterbatasan yang tersisa:
 
-**Rekomendasi perbaikan:** fine-tune bge-m3 dengan dokumen RPJMN/RKP/DIPA,
-atau gunakan model Indonesia-specific seperti `LazarusNLP/all-indo-e5-small`.
+- Prefix wajib `"query: "` saat inference — tanpa prefix, similarity turun ~15%.
+- Vocabulary militer teknis masih under-represented: "Penggunaan Kekuatan",
+  "Operasi Bidang Pertahanan" masih berpotensi under-score di L1/L2.
+  Mitigasi: MILITARY_DOMAIN_KL {"012","060"} (012=Kemhan, 060=Polri) di-suppress.
+- Kode output generik (EBA/EBB/EBC/EBD) tidak mengandung semantik yang bisa
+  dibandingkan dengan nama kegiatan. Mitigasi: EB-series di-suppress di L2.
+
+**Rekomendasi jika akurasi perlu ditingkatkan:** fine-tune e5-small dengan
+pasangan program↔kegiatan dari 10 tahun DIPA historis sebagai training set.
 
 ## 8.2 Peer Comparison Caveats
 
@@ -561,18 +612,20 @@ D:\Project\deepseek-kms\
 │   ├── 01_create_schema.py
 │   ├── 02_extract_pages.py
 │   ├── 03_chunk_and_clean.py
-│   ├── 03b_ai_clean.py
+│   ├── 03b_ai_clean.py           (deprecated — gunakan 03c)
+│   ├── 03c_batch_clean.py        ← produksi AI OCR cleaning
 │   ├── 04_extract_nodes.py
 │   ├── 05_build_edges.py
 │   ├── 06_extract_tables.py
-│   ├── 07_generate_embeddings.py
+│   ├── 07_generate_embeddings.py (legacy bge-m3, digantikan runtime embed di 10)
+│   ├── 08_extract_kl.py
 │   ├── 09_master_pipeline.py
 │   ├── 10_anomaly_detect.py
 │   ├── 11_treasurai_reasoning.py
 │   ├── 12_coherence.py
-│   ├── 13_coherence_levels.py
+│   ├── 13_apply_verdicts.py      ← strukturkan verdict TreasurAI
+│   ├── 13_coherence_levels.py    ← Level 1/2/3 + peer comparison
 │   ├── 14_fix_node_names.py
-│   ├── 08_extract_kl.py
 │   └── common\            (config.py, db.py, verdict.py)
 ├── dashboard\
 │   ├── app.py             (FastAPI API)
@@ -591,18 +644,18 @@ D:\Project\deepseek-kms\
 | Documents | 17 | 17 |
 | Pages | 4,478 | 4,478 |
 | Chunks | 1,444 | 990 (smarter) |
-| Nodes | 5,334 | 891 (connected) |
-| **Edges** | **0** ❌ | **699** ✅ |
-| **Embeddings** | **0** ❌ | **1,471** ✅ |
+| Nodes | 5,334 | 963 (connected) |
+| **Edges** | **0** ❌ | **857** ✅ |
+| **Embeddings** | **0** ❌ | **e5-small runtime** ✅ |
 | **AI Cleaned** | **0%** ❌ | **100%** ✅ |
-| **K/L Mapping** | **N/A** ❌ | **585 penugasan, 71 K/L** ✅ |
-| **Anomaly Detection** | **N/A** ❌ | **389 orphans with AI reasoning** ✅ |
-| **Coherence (3 level)** | **N/A** ❌ | **Level 1/2/3 + peer comparison + detail table** ✅ |
-| **Name Cleaning** | **N/A** ❌ | **856/891 nodes** ✅ |
+| **K/L Mapping** | **N/A** ❌ | **604 penugasan, 72 K/L** ✅ |
+| **Anomaly Detection** | **N/A** ❌ | **1 orphan + 1,541 weak (e5-small, ABS_FLOOR=45)** ✅ |
+| **Coherence (3 level)** | **N/A** ❌ | **L1=30 · L2=200 · L3=895 combos flagged** ✅ |
+| **Name Cleaning** | **N/A** ❌ | **796 AI-cleaned + 167 PP (node_name) = 963 total** ✅ |
 | **Dashboard** | **N/A** ❌ | **FastAPI + vis-network (5 tab)** ✅ |
 | **Hierarchy** | Flat list | Connected tree |
 | **Self-contained** | No | 14 scripts + dashboard + 6 docs |
 
 ---
 
-*Generated by Hermes Agent (DeepSeek) — 2026-06-07 · diperbarui 2026-06-09*
+*Generated by Hermes Agent (DeepSeek) — 2026-06-07 · diperbarui 2026-06-11*
