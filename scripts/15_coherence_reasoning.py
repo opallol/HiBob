@@ -19,6 +19,7 @@ import json, requests, time, sys
 from common.config import TREASURAI_BASE_URL, TREASURAI_API_KEY, TREASURAI_MODELS
 from common.db import get_connection
 from common.verdict import parse_verdict
+from common.kl_context import get_kl_mandate_context
 
 # === CONFIG ===
 MODEL         = "oss120b"
@@ -173,7 +174,10 @@ def process_l3(conn, cur, limit):
     for i, (kl, kl_name, prog, prog_name, keg, keg_name,
             out, out_name, dev_score, peer_cnt, akun_detail, pagu) in enumerate(rows):
 
-        akun_text = fmt_akun(akun_detail)
+        akun_text    = fmt_akun(akun_detail)
+        mandate_ctx  = get_kl_mandate_context(cur, kl)
+        mandate_section = ("\n%s\n" % mandate_ctx) if mandate_ctx else ""
+
         prompt = (
             "Anomali Koherensi Level 3 — Komposisi Akun vs Peer:\n"
             "K/L     : %s - %s\n"
@@ -181,10 +185,11 @@ def process_l3(conn, cur, limit):
             "Kegiatan: %s - %s\n"
             "Output  : %s - %s\n\n"
             "%s\n"
-            "Total pagu K/L ini: Rp %.2f T\n\n"
-            "Pertanyaan: Apakah ada justifikasi yang valid untuk pola belanja yang "
-            "sangat berbeda dari %d K/L peer? "
-            "Anomali valid, false positive, atau perlu review manual?"
+            "Total pagu K/L ini: Rp %.2f T\n"
+            "%s\n"
+            "Pertanyaan: Apakah pola belanja yang sangat berbeda dari %d K/L peer ini "
+            "dapat dijelaskan oleh mandat RPJMN/RKP K/L tersebut? "
+            "Anomali valid, false positive karena mandat khusus, atau perlu review manual?"
         ) % (
             kl, (kl_name  or "")[:60],
             prog, (prog_name or "")[:80],
@@ -192,6 +197,7 @@ def process_l3(conn, cur, limit):
             out,  (out_name  or "")[:80],
             akun_text,
             float(pagu) / 1e12,
+            mandate_section,
             peer_cnt,
         )
 
@@ -259,22 +265,27 @@ def process_l1l2(conn, cur, limit):
         if "level2_kegiatan_output_lemah" in flags:
             level_info.append("L2 Kegiatan ↔ Output similarity  : %.1f/100" % float(l2 or 0))
 
+        mandate_ctx     = get_kl_mandate_context(cur, kl)
+        mandate_section = ("\n%s\n" % mandate_ctx) if mandate_ctx else ""
+
         prompt = (
             "Anomali Koherensi Semantik (Level 1/2):\n"
             "K/L     : %s - %s\n"
             "Program : %s - %s\n"
             "Kegiatan: %s - %s\n\n"
             "%s\n"
-            "Pagu    : Rp %.3f T\n\n"
+            "Pagu    : Rp %.3f T\n"
+            "%s\n"
             "Pertanyaan: Mengapa similarity rendah? "
-            "Apakah ini perbedaan nomenklatur (false positive) "
-            "atau incoherence struktural yang genuine?"
+            "Gunakan mandat K/L dari RPJMN/RKP di atas untuk menilai apakah "
+            "ini perbedaan nomenklatur (false positive) atau incoherence struktural yang genuine."
         ) % (
             kl, (kl_name  or "")[:60],
             prog, (prog_name or "")[:80],
             keg,  (keg_name  or "")[:80],
             "\n".join(level_info),
             float(pagu) / 1e12,
+            mandate_section,
         )
 
         print("[%d/%d] %s L1=%.1f L2=%.1f pagu=Rp%.3fT..." % (

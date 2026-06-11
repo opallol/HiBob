@@ -17,6 +17,7 @@ import json, requests, time, sys
 from common.config import TREASURAI_BASE_URL, TREASURAI_API_KEY, TREASURAI_MODELS
 from common.db import get_connection
 from common.verdict import parse_verdict
+from common.kl_context import get_kl_mandate_context
 
 # === CONFIG ===
 MODEL        = "oss120b"
@@ -68,16 +69,21 @@ for i, (aid, atype, kl, kl_name, score, prio, txt, best_kp, top3_json) in enumer
         for t in top3[:3]
     )
 
+    # Konteks mandat K/L dari knowledge graph RPJMN/RKP
+    mandate_ctx = get_kl_mandate_context(cur, kl)
+    mandate_section = ("\n%s\n" % mandate_ctx) if mandate_ctx else ""
+
     if atype == "policy_orphan":
         question = (
             "Item ini tidak memiliki KP RPJMN/RKP yang cukup relevan (skor < 45 dan rank < P15). "
-            "Apakah ini anomali valid (program di luar cakupan prioritas nasional) "
-            "atau false positive akibat perbedaan nomenklatur?"
+            "Berdasarkan mandat K/L di atas, apakah ini anomali valid "
+            "(program di luar cakupan prioritas nasional) atau false positive "
+            "akibat perbedaan nomenklatur DIPA vs RPJMN?"
         )
     else:
         question = (
             "Item ini memiliki alignment lemah (rank < P15, skor ≥ 45). "
-            "Apakah ada penjelasan mengapa similaritynya rendah? "
+            "Berdasarkan mandat K/L di atas, apakah ada penjelasan mengapa similaritynya rendah? "
             "Misalnya: perbedaan nomenklatur DIPA vs RPJMN, program lintas sektor, "
             "atau memang tidak ada payung prioritas nasionalnya?"
         )
@@ -87,10 +93,12 @@ for i, (aid, atype, kl, kl_name, score, prio, txt, best_kp, top3_json) in enumer
         "K/L     : %s - %s\n"
         "Prog/Keg/Out: %s\n\n"
         "KP RPJMN/RKP terdekat (skor %.0f/100):\n%s\n\n"
-        "Top-3 semantic match:\n%s\n"
+        "Top-3 semantic match:\n%s"
+        "%s\n"
         "%s"
     ) % (type_label, kl, kl_name or "", (txt or "")[:300],
-         score, (best_kp or "")[:250], top3_lines, question)
+         score, (best_kp or "")[:250], top3_lines,
+         mandate_section, question)
 
     print("[%d/%d] %s [%s] prio=%.1f — %s..." % (
         i+1, len(items), kl, atype, prio, (txt or "")[:60]))
