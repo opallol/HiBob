@@ -110,8 +110,8 @@ def main():
                         help="Min peer K/L for detail table")
     parser.add_argument("--dev-flag", type=float, default=DEV_FLAG,
                         help="Total-variation threshold for L3 flag")
-    parser.add_argument("--model", type=str, default="LazarusNLP/all-indo-e5-small",
-                        help="SentenceTransformer model name (default: LazarusNLP/all-indo-e5-small)")
+    parser.add_argument("--model", type=str, default=EMBEDDING_MODEL,
+                        help="SentenceTransformer model name (default: from common.config.EMBEDDING_MODEL)")
     parser.add_argument("--query-prefix", type=str, default="query: ",
                         help="Prefix prepended to each text before encoding (default: 'query: ' for e5)")
     args = parser.parse_args()
