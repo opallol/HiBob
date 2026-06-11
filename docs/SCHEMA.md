@@ -247,8 +247,8 @@ Satu baris per agregasi pagu akun (1,504,455 rows). Dibangun oleh `12_coherence.
 jenis_komponen        VARCHAR  COMMENT 'Utama / Pendukung / none (t_kmpnen_2026)'
 jenis_anomaly         VARCHAR  COMMENT 'pendukung_dominan / utama_kecil / unclassified / normal'
 jenis_anomaly_score   DOUBLE   COMMENT 'Severity 0-100'
-prog_keg_coherence    DOUBLE   COMMENT 'Level 1: cosine bge-m3 Program<->Kegiatan x100'
-keg_out_coherence     DOUBLE   COMMENT 'Level 2: cosine bge-m3 Kegiatan<->Output x100'
+prog_keg_coherence    DOUBLE   COMMENT 'Level 1: cosine e5-small Program<->Kegiatan x100'
+keg_out_coherence     DOUBLE   COMMENT 'Level 2: cosine e5-small Kegiatan<->Output x100'
 out_komp_coherence    DOUBLE   COMMENT 'Level 3: 100 - deviasi komposisi akun'
 akun_komposisi_score  DOUBLE   COMMENT 'Level 3: deviasi vs peer x100 (0-100)'
 akun_detail           JSON     COMMENT 'Ringkasan komposisi own vs peer'
@@ -258,8 +258,8 @@ anomaly_flags         JSON     COMMENT 'Array level terpicu, mis. ["level3_akun_
 
 **anomaly_flags** dapat berisi: `level1_program_kegiatan_lemah`,
 `level2_kegiatan_output_lemah`, `level3_akun_tidak_lazim`.
-Threshold: L1/L2 bila similarity < persentil-15; L3 bila `peer_count >= 5` dan
-deviasi >= 0.40.
+Threshold: L1/L2 bila similarity < persentil-5 (pct_low=5); L3 bila `peer_count >= 5`
+dan deviasi >= 0.40 (atau >= 0.65 untuk EB-series output). Self-exclusion diterapkan.
 
 ## 12. ddac_coherence_akun_2026 — Detail Peer Komposisi Akun (Level 3)
 
@@ -286,11 +286,11 @@ kategori akun 2-digit (51 Pegawai, 52 Barang, 53 Modal, 54 Bunga, 55 Subsidi,
 | Feature | codex_policy_* | deepseek_policy_* |
 |---------|---------------|-------------------|
 | clean_text_ai | Empty (NULL) | Populated via LLM |
-| clean_node_name_ai | Empty (NULL) | Populated (regex unglue, 856/891) |
-| edges table | Exists but empty | Populated with hierarchy |
-| embeddings | Exists but empty | Populated with bge-m3 |
+| clean_node_name_ai | Empty (NULL) | Populated (753 KP + 43 PN; 167 PP via node_name) |
+| edges table | Exists but empty | Populated with hierarchy (857 edges) |
+| embeddings | Exists but empty | Legacy (0 rows); e5-small dipakai runtime di script 10/13 |
 | document_text_path | Not stored | source_path tracked |
 | extraction_status | Not tracked | Per-document status field |
-| kl_assignments | Not present | Dedicated table (585 baris) |
+| kl_assignments | Not present | Dedicated table (604 baris, 72 K/L) |
 | coherence (3 level) | Not present | ddac_coherence_2026 + _akun_2026 |
 | normalized_code | Not present | PN-01, PP-01-01 format |

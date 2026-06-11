@@ -6,10 +6,8 @@ Requires: pip install sentence-transformers
 import os, sys, struct
 import pymysql
 
-DB_CONFIG = {
-    "host": "172.16.2.153", "user": "ddac26", "password": "p4ssw0rd!",
-    "database": "ddac2026", "port": 3306, "charset": "utf8mb4"
-}
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common.config import DB_CONFIG  # noqa: E402
 
 try:
     from sentence_transformers import SentenceTransformer

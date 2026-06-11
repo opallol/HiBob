@@ -2,21 +2,13 @@
 Batch AI Cleaning — continuous loop until all chunks done.
 """
 import os, sys, time
-from pathlib import Path
 import pymysql
 from openai import OpenAI
 
-env_path = Path(r"D:\Project\deepseek-kms\.env")
-if env_path.exists():
-    with open(env_path) as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, _, val = line.partition('=')
-                os.environ[key.strip()] = val.strip().strip('"').strip("'")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common.config import DB_CONFIG as DB, DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL  # noqa: E402
 
-DB = {"host": "172.16.2.153", "user": "ddac26", "password": "p4ssw0rd!", "database": "ddac2026", "port": 3306, "charset": "utf8mb4"}
-client = OpenAI(api_key=os.environ["DEEPSEEK_API_KEY"], base_url="https://api.deepseek.com")
+client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
 
 PROMPT = "Perbaiki teks OCR rusak dari dokumen pemerintah Indonesia. Output HANYA teks bersih, tanpa kata pembuka.\n\nATURAN:\n1. Perbaiki error OCR umum: PRTORTTAS->PRIORITAS, ldeoIogi->Ideologi, Demolqasi->Demokrasi, PRES!DEN->PRESIDEN, REPU BLIK->REPUBLIK, INOONESIA->INDONESIA, FRESIDEN->PRESIDEN, FEPUBLTK->REPUBLIK\n2. PERTAHANKAN SEMUA angka, kode (01.01.01), jumlah Rp, persentase APA ADANYA\n3. JANGAN tambah, kurang, ringkas, atau ubah struktur teks\n4. JANGAN beri kata pembuka seperti Tentu, Berikut, Baik, atau penjelasan apapun\n\nTeks: {text}\n\nTeks bersih:"
 

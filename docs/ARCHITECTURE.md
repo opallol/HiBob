@@ -33,16 +33,16 @@ DeepSeek Policy KMS adalah knowledge management system yang mengekstrak, members
     │  deepseek_policy_tables + deepseek_policy_table_rows
     │
     ▼
-[Phase 7: Embeddings] ── bge-m3 vector embeddings
-    │  deepseek_policy_embeddings
+[Phase 7: Embeddings] ── bge-m3 legacy (tabel kosong, tidak aktif)
+    │  deepseek_policy_embeddings (0 rows)
     │
     ▼
 [Phase 8: K/L Assign] ── Parse institutional assignments
-    │  deepseek_policy_kl_assignments
+    │  deepseek_policy_kl_assignments (604 rows, 72 K/L)
     │
     ▼
-[Phase 10: Policy Alignment] ── bge-m3 cosine pagu vs KP nodes
-    │  ddac_anomaly_2026 (389 policy orphans) + TreasurAI reasoning
+[Phase 10: Policy Alignment] ── e5-small cosine pagu vs KP nodes (runtime)
+    │  ddac_anomaly_2026 (1 orphan + 1,541 weak) + TreasurAI reasoning
     │
     ▼
 [Phase 12-13: Internal Coherence] ── 3-level structural check
@@ -77,11 +77,11 @@ DeepSeek Policy KMS adalah knowledge management system yang mengekstrak, members
 ## 3. Node Hierarchy
 
 ```
-PN (Prioritas Nasional) ──── 8 items (RPJMN-defined)
+PN (Prioritas Nasional) ──── 43 nodes (RPJMN 01-08 + RKP)
  │
- └─ PP (Program Prioritas) ── ~30 items
+ └─ PP (Program Prioritas) ── 167 nodes
      │
-     └─ KP (Kegiatan Prioritas) ── ~200 items
+     └─ KP (Kegiatan Prioritas) ── 753 nodes
          │
          └─ PROGRAM ── K/L program codes
              │
@@ -99,7 +99,7 @@ PN (Prioritas Nasional) ──── 8 items (RPJMN-defined)
 | Clean BEFORE parse | Garbled text breaks hierarchy parsing |
 | Edges separate from nodes | Multi-document hierarchies differ (RPJMN vs RKP) |
 | Evidence per node | Every node traceable to source page |
-| bge-m3 for embeddings | 1024d, local, multilingual, proven in poc1 |
+| e5-small for embeddings | 384d, Indonesian fine-tune, runtime (no stored vecs) |
 | Dedicated table schema | KMS tables + future alignment tables stay separate |
 | source_type column | RPJMN, RKP_2025, RKP_2026 — enables cross-document comparison |
 
@@ -107,7 +107,7 @@ PN (Prioritas Nasional) ──── 8 items (RPJMN-defined)
 
 - **PDF Extraction**: PyMuPDF (pymupdf) — fast, reliable text layer extraction
 - **OCR Cleaning**: LLM (DeepSeek) — context-aware correction of garbled text
-- **Embeddings**: bge-m3 (BAAI) via sentence-transformers — local, no API cost
+- **Embeddings**: LazarusNLP/all-indo-e5-small via sentence-transformers — runtime, no stored vectors
 - **Database**: MySQL 8.4 (172.16.2.153) — existing infrastructure
 - **Language**: Python 3.11+ with pymysql, pymupdf, sentence-transformers
 
@@ -123,15 +123,15 @@ Program ──L1 cosine──► Kegiatan ──L2 cosine──► Output ──
 
 | Level | Pertanyaan | Metode | Output kolom |
 |-------|-----------|--------|--------------|
-| 1 | Kegiatan selaras dgn program? | cosine bge-m3 (uraian) | prog_keg_coherence |
-| 2 | Output selaras dgn kegiatan? | cosine bge-m3 (uraian) | keg_out_coherence |
+| 1 | Kegiatan selaras dgn program? | cosine e5-small (uraian) | prog_keg_coherence |
+| 2 | Output selaras dgn kegiatan? | cosine e5-small (uraian) | keg_out_coherence |
 | 3 | Jenis belanja lazim utk output ini? | peer comparison lintas K/L | out_komp_coherence, akun_komposisi_score |
 
 **Level 3 (peer comparison):** untuk setiap output, distribusi belanja per kategori
 akun 2-digit dibandingkan dengan rata-rata seluruh output berkode sama di semua K/L.
-Deviasi memakai **total variation distance** `0.5·Σ|own−peer|`. Karena similarity
-bge-m3 terkompresi (~0.40–0.77), **threshold memakai persentil (P15)** bukan nilai
-absolut. Detail per output disimpan di `ddac_coherence_akun_2026.akun_detail` (JSON).
+Deviasi memakai **total variation distance** `0.5·Σ|own−peer|`. Threshold: **persentil-5
+(P5)** untuk L1/L2, deviasi ≥ 0.40 untuk L3 (0.65 untuk EB-series). Detail per output
+disimpan di `ddac_coherence_akun_2026.akun_detail` (JSON).
 
 Composite: `coherence_score = 0.35·jenis + 0.20·L1 + 0.20·L2 + 0.25·L3`.
 Flag terkumpul di `anomaly_flags` (JSON array).
@@ -142,9 +142,10 @@ Flag terkumpul di `anomaly_flags` (JSON array).
 + angka + K/L) dengan kata menempel akibat hilangnya spasi line-break.
 `14_fix_node_names.py` membersihkannya secara **deterministik (regex, bukan LLM)**
 ke `clean_node_name_ai`: (1) potong sebelum penanda sasaran `NN -`; (2) pisah
-camelCase; (3) pisah kata sambung yang menempel (`Abadidan`→`Abadi dan`). 856/891
-simpul dibersihkan. Sifatnya non-destruktif; dashboard memakai
-`COALESCE(clean_node_name_ai, node_name)`.
+camelCase; (3) pisah kata sambung yang menempel (`Abadidan`→`Abadi dan`).
+753 KP + 43 PN mendapat `clean_node_name_ai` eksplisit. 167 PP menggunakan
+`node_name` langsung (PP names sudah bersih dari struktur RPJMN). Non-destruktif;
+dashboard memakai `COALESCE(clean_node_name_ai, node_name)` untuk semua 963 nodes.
 
 ## 8. Dashboard Review (Human-in-the-loop)
 

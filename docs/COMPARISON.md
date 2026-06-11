@@ -2,19 +2,19 @@
 
 ## Database State Comparison (as of 2026-06-07)
 
-### Row Counts
+### Row Counts (diverifikasi DB 2026-06-11)
 
 | Table | Codex | DeepSeek | Winner |
 |-------|-------|----------|--------|
-| documents | 17 | TBD | - |
-| pages | 4,478 | TBD | - |
-| chunks | 1,444 | TBD | - |
-| nodes | 5,334 | TBD | - |
-| tables | 199 | TBD | - |
-| table_rows | 2,197 | TBD | - |
-| **edges** | **0** | TBD | **?** |
-| **embeddings** | **0** | TBD | **?** |
-| **kl_assignments** | **N/A** | TBD | **?** |
+| documents | 17 | 17 | TIE |
+| pages | 4,478 | 4,478 | TIE |
+| chunks | 1,444 | 1,001 (990 cleaned) | **DS** (smarter) |
+| nodes | 5,334 | 963 (connected) | **DS** |
+| tables | 199 | 0 (script ada, belum run) | Codex |
+| table_rows | 2,197 | 0 | Codex |
+| **edges** | **0** | **857** | **DS** |
+| **embeddings** | **0** | **0 (e5-small runtime)** | **DS** |
+| **kl_assignments** | **N/A** | **604 (72 K/L)** | **DS** |
 
 ### Quality Comparison
 
@@ -23,7 +23,7 @@
 | OCR quality | Raw (garbled: "FengeEbangan") | AI-cleaned |
 | AI cleaning applied | 0% (all NULL) | 100% |
 | Hierarchy connected | No (0 edges) | Yes |
-| Semantic search ready | No (0 embeddings) | Yes (bge-m3) |
+| Semantic search ready | No (0 embeddings) | Yes (e5-small runtime) |
 | K/L mapping | Not parsed | Extracted |
 | Normalized codes | None | PN-01, PP-01-01 format |
 | Extraction status tracking | None | Per-document status |

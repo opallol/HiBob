@@ -5,12 +5,12 @@ Uses parent_code field to create the hierarchy tree.
 
 Edge types: HAS_PP, HAS_KP, HAS_PROGRAM, HAS_KEGIATAN, HAS_KRO, HAS_RO
 """
+import sys
+import os
 import pymysql
 
-DB_CONFIG = {
-    "host": "172.16.2.153", "user": "ddac26", "password": "p4ssw0rd!",
-    "database": "ddac2026", "port": 3306, "charset": "utf8mb4"
-}
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common.config import DB_CONFIG  # noqa: E402
 
 EDGE_MAP = {
     ('PN', 'PP'): 'HAS_PP',
@@ -82,7 +82,7 @@ def main():
         WHERE n1.id != n2.id
         AND (
             (n1.node_type = 'PP' AND n2.node_type = 'PN' 
-             AND LEFT(n1.node_code, 1) = n2.node_code)
+             AND SUBSTRING_INDEX(n1.node_code, '.', 1) = n2.node_code)
             OR
             (n1.node_type = 'KP' AND n2.node_type = 'PP'
              AND SUBSTRING_INDEX(n1.node_code, '.', 2) = n2.node_code)
