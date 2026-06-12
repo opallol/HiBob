@@ -1,4 +1,4 @@
-# Metodologi DeepSeek Policy KMS
+# Metodologi SENTINEL
 ## Sistem Analisis Keselarasan dan Koherensi Anggaran APBN 2026
 
 **Versi:** 1.1 (2026-06-12)

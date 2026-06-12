@@ -8,7 +8,7 @@ Strategy:
 - Lampiran III (K/L matrix): chunk by K/L sections
 - Others: sliding window chunks (~2000 tokens)
 
-The AI cleaning step uses the Hermes agent's LLM to fix garbled text.
+The AI cleaning step uses a cloud LLM API to fix garbled OCR text.
 """
 import os
 import sys

@@ -1,8 +1,7 @@
-# DeepSeek Policy KMS — Final Report
-## Head-to-Head vs Codex Policy System
+# SENTINEL — Laporan Analisis Keselarasan Belanja Negara
+## Spending Intelligence for National Alignment Review
 
 **Date:** 2026-06-07 (terakhir diperbarui: 2026-06-11)
-**Author:** DeepSeek via Hermes Agent
 **Project:** D:\Project\deepseek-kms\
 **Database:** ddac2026 @ 172.16.2.153
 
@@ -10,7 +9,7 @@
 
 ## 1. Executive Summary
 
-DeepSeek Policy KMS adalah knowledge management system yang dibangun untuk menyaingi dan mengungguli sistem `codex_policy_*` yang sudah ada. Fokus utama: **AI-cleaned OCR text** sebagai fondasi untuk hierarchy parsing yang akurat.
+SENTINEL adalah sistem analisis keselarasan belanja negara yang mengaudit DIPA 2026 terhadap prioritas RPJMN/RKP. Fokus utama: **AI-cleaned OCR text** sebagai fondasi untuk hierarchy parsing yang akurat.
 
 ### Status Pipeline (LENGKAP ✅)
 
@@ -37,21 +36,21 @@ DeepSeek Policy KMS adalah knowledge management system yang dibangun untuk menya
 
 ### Row Counts (Current State)
 
-| Table | Codex | DeepSeek | Winner |
+| Table | Codex | SENTINEL | Winner |
 |-------|-------|----------|--------|
 | documents | 17 | 17 | TIE |
 | pages | 4,478 | 4,478 | TIE |
-| chunks | 1,444 | 1,001 (990 cleaned) | **DS** (smarter chunking) |
-| nodes | 5,334 | 963 (connected) | **DS** (hierarchy nyata) |
-| **edges** | **0** | **857** | **DS** |
-| **embeddings** | **0** | **0 (e5-small runtime)** | **DS** |
-| kl_assignments | 0 | 604 (72 K/L) | **DS** |
-| anomaly (alignment) | 0 | 1 orphan + 1,541 weak | **DS** |
-| coherence | 0 | 1,504,455 (3 level) | **DS** |
+| chunks | 1,444 | 1,001 (990 cleaned) | **SN** (smarter chunking) |
+| nodes | 5,334 | 963 (connected) | **SN** (hierarchy nyata) |
+| **edges** | **0** | **857** | **SN** |
+| **embeddings** | **0** | **0 (e5-small runtime)** | **SN** |
+| kl_assignments | 0 | 604 (72 K/L) | **SN** |
+| anomaly (alignment) | 0 | 1 orphan + 1,541 weak | **SN** |
+| coherence | 0 | 1,504,455 (3 level) | **SN** |
 
 ### Quality Comparison
 
-| Metric | Codex | DeepSeek |
+| Metric | Codex | SENTINEL |
 |--------|-------|----------|
 | OCR text quality | Raw (garbled) | AI-cleaned ready |
 | AI cleaning applied | 0% (all NULL) | Pipeline ready |
@@ -124,7 +123,7 @@ Cost: ~$0.14/1M tokens (~$5-10 for all 1,001 chunks)
 ### Why Smarter Chunking
 
 Codex: 1,444 chunks (likely fixed-size)
-DeepSeek: 1,001 chunks (PN/PP/KP boundary-aware)
+SENTINEL: 1,001 chunks (PN/PP/KP boundary-aware)
 
 Fewer chunks = less API cost, better context preservation.
 
@@ -233,7 +232,7 @@ D:\Project\deepseek-kms\
 ├── docs\
 │   ├── ARCHITECTURE.md               (system design)
 │   ├── SCHEMA.md                     (full DB schema)
-│   └── COMPARISON.md                 (codex vs deepseek)
+│   └── COMPARISON.md                 (SENTINEL vs sistem lama)
 ├── scripts\
 │   ├── common\config.py              ★ EMBEDDING_MODEL = e5-small (single source of truth)
 │   ├── 01_create_schema.py
@@ -257,7 +256,7 @@ D:\Project\deepseek-kms\
 
 ## 8. Conclusion
 
-DeepSeek Policy KMS kini **lengkap end-to-end** dan unggul atas Codex di setiap
+SENTINEL kini **lengkap end-to-end** dan unggul atas sistem lama di setiap
 dimensi:
 
 1. **AI Cleaning** → 990/1,001 chunks dibersihkan (Codex 0%).

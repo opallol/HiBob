@@ -1,4 +1,4 @@
-# DeepSeek Policy KMS — Database Schema
+# SENTINEL — Database Schema
 
 Semua tabel dalam database `ddac2026`. Tabel knowledge graph berprefix
 `deepseek_policy_*`; tabel hasil analisis berprefix `ddac_*`.

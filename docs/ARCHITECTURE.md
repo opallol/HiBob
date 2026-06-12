@@ -1,8 +1,8 @@
-# DeepSeek Policy KMS — Architecture
+# SENTINEL — Architecture
 
 ## 1. System Overview
 
-DeepSeek Policy KMS adalah knowledge management system yang mengekstrak, membersihkan, dan menstrukturkan dokumen perencanaan nasional ke dalam relational knowledge graph.
+SENTINEL adalah sistem analisis keselarasan belanja negara yang mengekstrak, membersihkan, dan menstrukturkan dokumen perencanaan nasional ke dalam relational knowledge graph untuk mendukung audit DIPA vs RPJMN/RKP.
 
 ### Core Pipeline
 
@@ -56,7 +56,7 @@ DeepSeek Policy KMS adalah knowledge management system yang mengekstrak, members
 [Phase 16: Web Visualisasi] ── ekspor JSON statis → web/ (Vite + React, human review)
 ```
 
-## 2. Why DeepSeek Wins
+## 2. Keunggulan SENTINEL
 
 ### Problem with Codex System
 
@@ -66,7 +66,7 @@ DeepSeek Policy KMS adalah knowledge management system yang mengekstrak, members
 4. **Poor node type categorization**: PN/PP/KP mixed with PROGRAM/KEGIATAN/KRO/RO — no clear distinction between planning entities and budget entities.
 5. **Tables only from RPJMN**: 199 tables extracted but only from Lampiran III. RKP tables untouched.
 
-### DeepSeek Solutions
+### Solusi SENTINEL
 
 1. **Full hierarchy**: PN → PP → KP → (PROGRAM → KEGIATAN → KRO → RO) with explicit edges
 2. **AI cleaning first**: LLM-based OCR correction BEFORE node extraction
@@ -106,7 +106,7 @@ PN (Prioritas Nasional) ──── 43 nodes (RPJMN 01-08 + RKP)
 ## 5. Technical Stack
 
 - **PDF Extraction**: PyMuPDF (pymupdf) — fast, reliable text layer extraction
-- **OCR Cleaning**: LLM (DeepSeek) — context-aware correction of garbled text
+- **OCR Cleaning**: LLM API (cloud) — context-aware correction of garbled text
 - **Embeddings**: LazarusNLP/all-indo-e5-small via sentence-transformers — runtime, no stored vectors
 - **Database**: MySQL 8.4 (172.16.2.153) — existing infrastructure
 - **Language**: Python 3.11+ with pymysql, pymupdf, sentence-transformers

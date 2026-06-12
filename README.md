@@ -1,6 +1,4 @@
-# DeepSeek Policy KMS — Knowledge Management System
-
-## Saingan `codex_policy_*` — by DeepSeek via Hermes Agent
+# SENTINEL — Spending Intelligence for National Alignment Review
 
 ### Status Per 2026-06-08 — PIPELINE LENGKAP ✅
 
@@ -44,7 +42,7 @@ Tanpa AI cleaning: parsing gagal. Dengan AI cleaning: hierarchy tree langsung te
 
 ### Winning Scorecard
 
-| Metric | Codex | DeepSeek |
+| Metric | Codex | SENTINEL |
 |--------|-------|----------|
 | Documents | 17 | 17 ✅ |
 | Pages | 4,478 | 4,478 ✅ |

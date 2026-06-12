@@ -1,24 +1,24 @@
-# Codex vs DeepSeek — Head-to-Head Comparison
+# SENTINEL vs Sistem Lama — Perbandingan
 
 ## Database State Comparison (as of 2026-06-07)
 
 ### Row Counts (diverifikasi DB 2026-06-11)
 
-| Table | Codex | DeepSeek | Winner |
+| Table | Codex | SENTINEL | Winner |
 |-------|-------|----------|--------|
 | documents | 17 | 17 | TIE |
 | pages | 4,478 | 4,478 | TIE |
-| chunks | 1,444 | 1,001 (990 cleaned) | **DS** (smarter) |
-| nodes | 5,334 | 963 (connected) | **DS** |
+| chunks | 1,444 | 1,001 (990 cleaned) | **SN** (smarter) |
+| nodes | 5,334 | 963 (connected) | **SN** |
 | tables | 199 | 0 (script ada, belum run) | Codex |
 | table_rows | 2,197 | 0 | Codex |
-| **edges** | **0** | **857** | **DS** |
-| **embeddings** | **0** | **0 (e5-small runtime)** | **DS** |
-| **kl_assignments** | **N/A** | **604 (72 K/L)** | **DS** |
+| **edges** | **0** | **857** | **SN** |
+| **embeddings** | **0** | **0 (e5-small runtime)** | **SN** |
+| **kl_assignments** | **N/A** | **604 (72 K/L)** | **SN** |
 
 ### Quality Comparison
 
-| Metric | Codex | DeepSeek |
+| Metric | Codex | SENTINEL |
 |--------|-------|----------|
 | OCR quality | Raw (garbled: "FengeEbangan") | AI-cleaned |
 | AI cleaning applied | 0% (all NULL) | 100% |
@@ -31,10 +31,10 @@
 ### Sample OCR Quality
 
 Codex raw: `"FengeEbangan Tenaga Tektia P€f, adilan UmuE"`
-DeepSeek AI-cleaned: `"Pengembangan Tenaga Teknis Peradilan Umum"` (expected)
+SENTINEL AI-cleaned: `"Pengembangan Tenaga Teknis Peradilan Umum"` (expected)
 
 Codex raw: `"PengeEbartgart T€naga Telglis Peradilai AgaEa"`
-DeepSeek AI-cleaned: `"Pengembangan Tenaga Teknis Peradilan Agama"` (expected)
+SENTINEL AI-cleaned: `"Pengembangan Tenaga Teknis Peradilan Agama"` (expected)
 
 ### Critical Gaps in Codex
 
@@ -44,7 +44,7 @@ DeepSeek AI-cleaned: `"Pengembangan Tenaga Teknis Peradilan Agama"` (expected)
 4. **NO K/L ASSIGNMENTS**: Cannot determine which ministry owns which KP.
 5. **TABLES ONLY RPJMN**: RKP 2025/2026 tables not extracted.
 
-### DeepSeek Advantages
+### Keunggulan SENTINEL
 
 1. **Clean-first architecture**: AI cleaning before parsing ensures accurate extraction
 2. **Complete hierarchy**: Full tree with edges allows graph traversal
