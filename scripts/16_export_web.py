@@ -443,7 +443,6 @@ def main():
         "modes": [
             {"key": "pat", "label": "Pola komposisi akun"},
             {"key": "v",   "label": "Status verdict"},
-            {"key": "kl",  "label": "Per kementerian/lembaga"},
         ],
         "verdicts":      VERDICTS,
         "patterns":      patterns,

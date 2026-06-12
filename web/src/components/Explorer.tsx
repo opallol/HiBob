@@ -15,7 +15,6 @@ interface Props {
 
 const ALIGN_MODES: { key: ModeKey; label: string }[] = [
   { key: "pat", label: "Jenis anomali" },
-  { key: "kl",  label: "Per K/L" },
 ];
 
 const SEM_PAT = new Set(["l1", "l2", "l1l2"]);
