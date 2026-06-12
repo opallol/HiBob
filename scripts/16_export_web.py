@@ -194,7 +194,7 @@ def export_pipeline(cur):
         "chunks":      scalar("SELECT COUNT(*) FROM deepseek_policy_chunks"),
         "nodes_kb":    scalar("SELECT COUNT(*) FROM deepseek_policy_nodes"),
         "edges_kb":    scalar("SELECT COUNT(*) FROM deepseek_policy_edges"),
-        "embeddings":  scalar("SELECT COUNT(*) FROM deepseek_policy_embeddings"),
+        "dipa_lines":  scalar("SELECT COUNT(*) FROM ddac_pagu_akun_2026"),
         "anomaly":     scalar("SELECT COUNT(*) FROM ddac_anomaly_2026 WHERE anomaly_type IN ('policy_orphan','weak_alignment')"),
         "coherence":   scalar("SELECT COUNT(*) FROM ddac_coherence_akun_2026 WHERE akun_komposisi_score>=40"),
         "reasoned":    scalar("SELECT COUNT(*) FROM ddac_coherence_2026 WHERE llm_reasoning IS NOT NULL"),
@@ -208,8 +208,11 @@ def export_pipeline(cur):
          "steps": ["Ekstraksi node PN/PP/KP", "Bangun edge hierarki prioritas"],
          "metric": "%s node · %s edge" % (counts["nodes_kb"], counts["edges_kb"])},
         {"id": "embed", "label": "Embedding", "icon": "vector-triangle",
-         "steps": ["e5-small lokal untuk DIPA (data internal)", "Index vektor knowledge graph"],
-         "metric": "%s vektor" % format(counts["embeddings"], ",")},
+         "steps": ["e5-small lokal embed DIPA + knowledge graph", "Vektor dihitung runtime, tak disimpan (privasi)"],
+         "metric": "%s KP + %s baris DIPA · e5-small" % (
+             format(counts["nodes_kb"], ","),
+             ("%.1f jt" % (counts["dipa_lines"] / 1e6)) if counts["dipa_lines"] >= 1e6
+             else format(counts["dipa_lines"], ","))},
         {"id": "align", "label": "Alignment DIPA↔RPJMN", "icon": "git-compare",
          "steps": ["Skor kemiripan semantik", "Deteksi policy_orphan & weak_alignment"],
          "metric": "%s anomali alignment" % format(counts["anomaly"], ",")},
