@@ -18,7 +18,7 @@ function keyOf(n: BubbleNode, mode: ModeKey): string {
 function labelOf(key: string, mode: ModeKey, m: Manifest): string {
   if (mode === "v") return VERDICT_LABEL[key as keyof typeof VERDICT_LABEL] ?? key;
   if (mode === "kl") return `${key} ${m.kls[key] ?? ""}`.trim();
-  return m.patterns[key] ?? key;
+  return m.patterns[key] ?? m.align_patterns?.[key] ?? key;
 }
 
 // teks lengkap (tak terpotong) untuk tooltip baris
@@ -54,7 +54,7 @@ export default function AnomalyList({ nodes, mode, manifest, selectedId, onSelec
     return arr;
   }, [nodes, mode]);
 
-  const totalPagu = manifest.totals.total_pagu;
+  const totalPagu = useMemo(() => Math.max(1, nodes.reduce((s, n) => s + n.pagu, 0)), [nodes]);
 
   const query = q.trim().toLowerCase();
   const searchHits = useMemo(() => {

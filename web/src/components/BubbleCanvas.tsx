@@ -48,7 +48,7 @@ function clusterKey(n: BubbleNode, mode: ModeKey): string {
 function clusterLabel(key: string, mode: ModeKey, m: Manifest): string {
   if (mode === "v") return VERDICT_LABEL[key as keyof typeof VERDICT_LABEL] ?? key;
   if (mode === "kl") return `${key} ${m.kls[key] ?? ""}`.trim();
-  return m.patterns[key] ?? key;
+  return m.patterns[key] ?? m.align_patterns?.[key] ?? key;
 }
 
 const esc = (s: string) =>

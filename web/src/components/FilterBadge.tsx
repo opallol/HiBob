@@ -4,10 +4,12 @@ interface Props {
   manifest: Manifest;
   mode: ModeKey;
   onChange: (m: ModeKey) => void;
+  modes?: { key: ModeKey; label: string }[];
 }
 
-export default function FilterBadge({ manifest, mode, onChange }: Props) {
-  const active = manifest.modes.find((m) => m.key === mode);
+export default function FilterBadge({ manifest, mode, onChange, modes }: Props) {
+  const activeModes = modes ?? manifest.modes;
+  const active = activeModes.find((m) => m.key === mode);
   return (
     <div className="absolute top-4 left-4 z-20">
       <div className="flex items-center gap-2.5 rounded-xl border border-ink-700 bg-ink-900/90 backdrop-blur px-3 py-2 shadow-lg">
@@ -23,7 +25,7 @@ export default function FilterBadge({ manifest, mode, onChange }: Props) {
             onChange={(e) => onChange(e.target.value as ModeKey)}
             className="bg-transparent text-[13px] font-medium text-slate-100 outline-none cursor-pointer -ml-0.5"
           >
-            {manifest.modes.map((m) => (
+            {activeModes.map((m) => (
               <option key={m.key} value={m.key} className="bg-ink-850 text-slate-100">
                 {m.label}
               </option>

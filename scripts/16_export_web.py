@@ -48,6 +48,11 @@ VERDICTS = [
     {"key": "unclear", "label": "Tidak ditemukan anomali", "color": "slate"},
 ]
 
+ALIGN_PATTERN_LABELS = {
+    "orphan": "Policy Orphan",
+    "weak":   "Keselarasan Lemah",
+}
+
 
 def jparse(s):
     try:
@@ -234,6 +239,91 @@ def export_pipeline(cur):
     return counts
 
 
+def export_alignment(cur, mandat_idx):
+    """Node bubble + detail per output anomali policy alignment (orphan + weak_alignment)."""
+    cur.execute(f"""
+        SELECT
+            a.kementerian_kode, a.program_kode, a.kegiatan_kode, p.outputkro_kode,
+            a.kementerian_uraian, p.program_uraian,
+            p.kegiatan_uraian,   p.outputkro_uraian,
+            a.total_pagu,
+            a.alignment_score, a.anomaly_type,
+            a.anomaly_score,   a.spending_nature,
+            a.treasurai_verdict, a.llm_model, a.llm_reasoning,
+            a.top3_matches
+        FROM {T_ANOMALY} a
+        JOIN {T_PAGU} p ON a.pagu_id = p.id
+        WHERE a.anomaly_type IN ('policy_orphan', 'weak_alignment')
+        ORDER BY a.total_pagu DESC
+    """)
+    rows = cur.fetchall()
+
+    nodes         = []
+    details_by_kl = defaultdict(dict)
+    kl_names      = {}
+
+    for (kl, prog, keg, out,
+         kl_name, prog_name, keg_name, out_name,
+         pagu, align_score, anomaly_type, anomaly_score,
+         spending_nature, verdict, model, reasoning, top3_json) in rows:
+
+        kl_names[kl] = (kl_name or "")[:60]
+        pat = "orphan" if anomaly_type == "policy_orphan" else "weak"
+        v   = VERDICT_MAP.get((verdict or "").strip(), "unclear")
+        nid = "%s-%s-%s-%s" % (kl, prog, keg, out or "-")
+
+        nodes.append({
+            "id":   nid,
+            "kl":   kl,
+            "nm":   ("%s · %s" % ((out or "-"), (out_name or "")[:48])).strip(),
+            "pagu": round(float(pagu or 0), 2),
+            "v":    v,
+            "pat":  pat,
+            "dev":  round(float(anomaly_score or 0), 1),
+            "peer": 0,
+        })
+
+        top3 = []
+        try:
+            t3 = json.loads(top3_json) if isinstance(top3_json, str) else (top3_json or [])
+            for m in (t3 if isinstance(t3, list) else []):
+                top3.append({
+                    "c": str(m.get("code", "")),
+                    "n": (m.get("name", "") or "")[:90],
+                    "r": str(round(float(m.get("score", 0)), 1)),
+                })
+        except Exception:
+            pass
+
+        details_by_kl[kl][nid] = {
+            "kl":      kl,
+            "kln":     (kl_name or "")[:80],
+            "prog":    ("%s · %s" % (prog, (prog_name or "")[:70])).strip(),
+            "keg":     ("%s · %s" % (keg,  (keg_name or "")[:70])).strip(),
+            "out":     ("%s · %s" % (out,  (out_name or "")[:70])).strip(),
+            "pagu":    round(float(pagu or 0), 2),
+            "dev":     round(float(anomaly_score or 0), 1),
+            "pc":      0,
+            "own":     {"skor": round(float(align_score or 0), 1)},
+            "peer":    {},
+            "v":       v,
+            "md":      model or "oss120b",
+            "rs":      (reasoning or "")[:1600],
+            "mandat":  top3,
+            "dataset": "alignment",
+            "nature":  spending_nature or "substantive",
+        }
+
+    ALIGN_DIR = os.path.join(OUT_DIR, "alignment")
+    ALIGN_DET = os.path.join(ALIGN_DIR, "details")
+    write_json(os.path.join(ALIGN_DIR, "nodes.json"), nodes)
+    for kl, det in details_by_kl.items():
+        write_json(os.path.join(ALIGN_DET, "%s.json" % kl), det)
+
+    print("  alignment: %d node, %d K/L" % (len(nodes), len(details_by_kl)))
+    return nodes, kl_names
+
+
 def main():
     conn = get_connection()
     cur  = conn.cursor()
@@ -243,13 +333,18 @@ def main():
 
     mandat_idx = build_mandat_index(cur)
     nodes, patterns, kl_names, cat = export_coherence(cur, mandat_idx)
+    align_nodes, align_kl_names    = export_alignment(cur, mandat_idx)
     export_knowledge_graph(cur)
     counts = export_pipeline(cur)
 
-    total_pagu = sum(n["pagu"] for n in nodes)
+    total_pagu       = sum(n["pagu"] for n in nodes)
+    align_total_pagu = sum(n["pagu"] for n in align_nodes)
     vcount = defaultdict(int)
     for n in nodes:
         vcount[n["v"]] += 1
+
+    # Gabung kamus K/L dari kedua dataset
+    all_kl_names = {**kl_names, **align_kl_names}
 
     manifest = {
         "generated": "2026-06-12",
@@ -266,14 +361,22 @@ def main():
             {"key": "v",   "label": "Status verdict"},
             {"key": "kl",  "label": "Per kementerian/lembaga"},
         ],
-        "verdicts": VERDICTS,
-        "patterns": patterns,
-        "kls":      kl_names,
-        "akun":     cat,
+        "verdicts":      VERDICTS,
+        "patterns":      patterns,
+        "kls":           all_kl_names,
+        "akun":          cat,
+        "align_patterns": ALIGN_PATTERN_LABELS,
+        "align_totals": {
+            "alignment_nodes": len(align_nodes),
+            "total_pagu":      round(align_total_pagu, 2),
+            "kl":              len(align_kl_names),
+        },
     }
     write_json(os.path.join(OUT_DIR, "manifest.json"), manifest)
-    print("  manifest: %d node, %d K/L, %d pola" % (len(nodes), len(kl_names), len(patterns)))
-    print("\nSelesai. Total pagu node: Rp %.1f T" % (total_pagu / 1e12))
+    print("  manifest: %d koherensi, %d alignment, %d K/L" % (
+        len(nodes), len(align_nodes), len(all_kl_names)))
+    print("\nSelesai. Koherensi Rp %.1f T · Alignment Rp %.1f T" % (
+        total_pagu / 1e12, align_total_pagu / 1e12))
     conn.close()
 
 

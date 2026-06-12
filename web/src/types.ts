@@ -27,6 +27,8 @@ export interface Manifest {
   patterns: Record<string, string>;
   kls: Record<string, string>;
   akun: Record<string, string>;
+  align_patterns?: Record<string, string>;
+  align_totals?: { alignment_nodes: number; total_pagu: number; kl: number };
 }
 
 export interface MandatItem {
@@ -50,6 +52,8 @@ export interface NodeDetail {
   md: string;
   rs: string;
   mandat: MandatItem[];
+  dataset?: "coherence" | "alignment";
+  nature?: string;
 }
 
 export interface PipelinePhase {

@@ -71,18 +71,30 @@ export default function DetailCard({ detail, loading, manifest, onClose }: Props
                 </button>
               </div>
 
-              <div className="grid grid-cols-3 gap-1.5 mt-3">
-                {[
-                  { v: `${detail.dev.toFixed(0)}%`, l: "deviasi" },
-                  { v: rupiahT(detail.pagu).replace("Rp ", ""), l: "pagu" },
-                  { v: String(detail.pc), l: "peer" },
-                ].map((s) => (
-                  <div key={s.l} className="rounded-lg bg-ink-800 px-1 py-2 text-center">
-                    <div className="text-[13px] font-medium text-slate-100 tabular-nums">{s.v}</div>
-                    <div className="text-[9px] text-ink-600 uppercase tracking-wide">{s.l}</div>
+              {(() => {
+                const isAlign = detail.dataset === "alignment";
+                const stats = isAlign
+                  ? [
+                      { v: `${(detail.own["skor"] ?? 0).toFixed(0)}/100`, l: "keselarasan" },
+                      { v: rupiahT(detail.pagu).replace("Rp ", ""), l: "pagu" },
+                      { v: `${detail.dev.toFixed(0)}`, l: "skor anomali" },
+                    ]
+                  : [
+                      { v: `${detail.dev.toFixed(0)}%`, l: "deviasi" },
+                      { v: rupiahT(detail.pagu).replace("Rp ", ""), l: "pagu" },
+                      { v: String(detail.pc), l: "peer" },
+                    ];
+                return (
+                  <div className="grid grid-cols-3 gap-1.5 mt-3">
+                    {stats.map((s) => (
+                      <div key={s.l} className="rounded-lg bg-ink-800 px-1 py-2 text-center">
+                        <div className="text-[13px] font-medium text-slate-100 tabular-nums">{s.v}</div>
+                        <div className="text-[9px] text-ink-600 uppercase tracking-wide">{s.l}</div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                );
+              })()}
 
               <div className="mt-3 flex items-center gap-2">
                 <span
@@ -94,16 +106,28 @@ export default function DetailCard({ detail, loading, manifest, onClose }: Props
                 <span className="text-[10px] text-ink-600">model {detail.md}</span>
               </div>
 
+              {detail.nature && detail.dataset === "alignment" && (
+                <div className="mt-2">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-ink-800 text-slate-400">
+                    {detail.nature === "policy_orphan" ? "policy orphan" : detail.nature.replace("_", " ")}
+                  </span>
+                </div>
+              )}
+
               <p className="mt-3 text-[12px] leading-relaxed text-slate-300">{detail.rs}</p>
 
-              <div className="mt-4">
-                <div className="text-[11px] text-slate-400 mb-2">Komposisi akun</div>
-                <CompBars detail={detail} akun={manifest.akun} />
-              </div>
+              {detail.dataset !== "alignment" && (
+                <div className="mt-4">
+                  <div className="text-[11px] text-slate-400 mb-2">Komposisi akun</div>
+                  <CompBars detail={detail} akun={manifest.akun} />
+                </div>
+              )}
 
               {detail.mandat.length > 0 && (
                 <div className="mt-4">
-                  <div className="text-[11px] text-slate-400 mb-1.5">Mandat RPJMN/RKP terkait</div>
+                  <div className="text-[11px] text-slate-400 mb-1.5">
+                    {detail.dataset === "alignment" ? "KP RPJMN/RKP terdekat" : "Mandat RPJMN/RKP terkait"}
+                  </div>
                   <div className="flex flex-wrap gap-1.5">
                     {detail.mandat.slice(0, 5).map((mn) => (
                       <span
@@ -111,7 +135,7 @@ export default function DetailCard({ detail, loading, manifest, onClose }: Props
                         className="text-[10px] text-slate-300 bg-ink-800 rounded-full px-2 py-0.5"
                         title={mn.n}
                       >
-                        KP {mn.c}
+                        {detail.dataset === "alignment" ? `${mn.c} (${mn.r})` : `KP ${mn.c}`}
                       </span>
                     ))}
                   </div>
