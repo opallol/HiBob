@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { BubbleNode, Manifest, ModeKey, NodeDetail } from "../types";
 import { loadDetail, loadAlignNodes, loadAlignDetail } from "../data";
 import BubbleCanvas from "./BubbleCanvas";
@@ -15,12 +15,22 @@ interface Props {
 
 const ALIGN_MODES: { key: ModeKey; label: string }[] = [
   { key: "pat", label: "Jenis anomali" },
-  { key: "v",   label: "Status verdict" },
   { key: "kl",  label: "Per K/L" },
+];
+
+const SEM_PAT = new Set(["l1", "l2", "l1l2"]);
+
+type CohFilter = "all" | "l3" | "sem";
+
+const COH_FILTERS: { key: CohFilter; label: string }[] = [
+  { key: "all", label: "Semua" },
+  { key: "l3",  label: "L3 Komposisi Akun" },
+  { key: "sem", label: "L1/L2 Semantik" },
 ];
 
 export default function Explorer({ manifest, nodes, embed }: Props) {
   const [dataset, setDataset]       = useState<"coherence" | "alignment">("coherence");
+  const [cohFilter, setCohFilter]   = useState<CohFilter>("all");
   const [alignNodes, setAlignNodes] = useState<BubbleNode[] | null>(null);
   const [alignErr, setAlignErr]     = useState<string | null>(null);
 
@@ -30,8 +40,14 @@ export default function Explorer({ manifest, nodes, embed }: Props) {
   const [loading, setLoading]       = useState(false);
   const [focusNonce, setFocusNonce] = useState(0);
 
-  const activeNodes  = dataset === "coherence" ? nodes : (alignNodes ?? []);
-  const activeModes  = dataset === "coherence" ? undefined : ALIGN_MODES;
+  const cohNodes = useMemo(() => {
+    if (cohFilter === "l3")  return nodes.filter(n => !SEM_PAT.has(n.pat));
+    if (cohFilter === "sem") return nodes.filter(n =>  SEM_PAT.has(n.pat));
+    return nodes;
+  }, [nodes, cohFilter]);
+
+  const activeNodes = dataset === "coherence" ? cohNodes : (alignNodes ?? []);
+  const activeModes = dataset === "coherence" ? undefined : ALIGN_MODES;
 
   // Lazy-load alignment nodes saat pertama kali tab dipilih
   useEffect(() => {
@@ -62,12 +78,20 @@ export default function Explorer({ manifest, nodes, embed }: Props) {
     setDetail(null);
   }
 
+  function handleCohFilter(f: CohFilter) {
+    setCohFilter(f);
+    setSelectedId(null);
+    setDetail(null);
+  }
+
   useEffect(() => {
     setSelectedId(null);
     setDetail(null);
   }, [mode]);
 
   const alignCount = manifest.align_totals?.alignment_nodes ?? null;
+  const l3Count    = useMemo(() => nodes.filter(n => !SEM_PAT.has(n.pat)).length, [nodes]);
+  const semCount   = useMemo(() => nodes.filter(n =>  SEM_PAT.has(n.pat)).length, [nodes]);
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -103,6 +127,32 @@ export default function Explorer({ manifest, nodes, embed }: Props) {
           <span className="ml-2 text-[11px] text-slate-500">Memuat…</span>
         )}
       </div>
+
+      {/* Sub-filter koherensi: Semua / L3 / Semantik */}
+      {dataset === "coherence" && (
+        <div className="flex shrink-0 items-center gap-1 border-b border-ink-800/60 bg-ink-950/70 px-3 py-1">
+          {COH_FILTERS.map(({ key, label }) => {
+            const count = key === "all" ? nodes.length : key === "l3" ? l3Count : semCount;
+            const active = cohFilter === key;
+            return (
+              <button
+                key={key}
+                onClick={() => handleCohFilter(key)}
+                className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                  active
+                    ? "bg-slate-700/70 text-slate-100"
+                    : "text-ink-600 hover:text-slate-400"
+                }`}
+              >
+                {label}
+                <span className={`ml-1 tabular-nums ${active ? "text-slate-400" : "text-ink-700"}`}>
+                  {count.toLocaleString()}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Canvas + daftar anomali */}
       <div className="flex min-h-0 flex-1">
