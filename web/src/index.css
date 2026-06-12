@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #0a0e1a;
+  color: #e6ebf5;
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* scrollbar halus untuk panel daftar */
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: #252e4a;
+  border-radius: 4px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* radial glow latar kanvas */
+.canvas-glow {
+  background:
+    radial-gradient(900px 600px at 60% 38%, rgba(43, 58, 110, 0.35), transparent 70%),
+    radial-gradient(700px 500px at 25% 75%, rgba(33, 90, 70, 0.16), transparent 70%);
+}
