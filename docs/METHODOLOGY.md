@@ -1,7 +1,7 @@
 # Metodologi SENTINEL
 ## Sistem Analisis Keselarasan dan Koherensi Anggaran APBN 2026
 
-**Versi:** 1.1 (2026-06-12)
+**Versi:** 1.2 (2026-06-12)
 **Database:** `ddac2026` @ 172.16.2.153
 
 ---
@@ -17,6 +17,106 @@ Sebelum masuk ke fase-fase teknis, hal paling fundamental yang perlu dipahami ad
 | **TreasurAI OSS 120B** | API Internal Kemenkeu | Reasoning **semua** anomali keselarasan (1 orphan + 1,541 weak) dan anomali koherensi L3 (19,235 baris) | Data DIPA yang sudah dianalisis dikirim ke sistem internal Kemenkeu. Tidak keluar jaringan. |
 
 **Prinsip dasar:** Data yang lebih sensitif ditangani oleh infrastruktur yang lebih tertutup. Dokumen kebijakan publik → cloud. Data anggaran K/L → lokal. Analisis kualitatif anggaran → jaringan internal Kemenkeu.
+
+---
+
+## Bagaimana Sistem Mendefinisikan "Wajar"?
+
+> Ini adalah pertanyaan paling mendasar dalam sistem deteksi anomali berbasis ML: **dari mana angka ambang batas itu datang, dan bagaimana mesin tahu bahwa sesuatu tidak normal?**
+
+### 1. Embedding: Mengubah Teks Menjadi Angka yang Bisa Dibandingkan
+
+Manusia bisa membaca "Pengelolaan Pendidikan Dasar" dan "Peningkatan Mutu Sekolah" lalu langsung tahu keduanya berkaitan. Mesin tidak bisa membaca teks — tapi mesin bisa menghitung jarak antara dua titik di ruang geometris.
+
+Model embedding (`LazarusNLP/all-indo-e5-small`) melakukan satu pekerjaan: **mengubah teks menjadi vektor** — sebuah daftar 384 angka yang merepresentasikan "posisi semantik" teks tersebut di ruang berdimensi 384. Model ini sudah dilatih pada ratusan juta kalimat berbahasa Indonesia; selama pelatihan ia "belajar" bahwa kata-kata dan frasa yang sering muncul dalam konteks yang sama memiliki posisi yang berdekatan.
+
+```
+"Pengelolaan Pendidikan Dasar"   → [0.23, -0.41, 0.88, ..., 0.12]  (384 angka)
+"Peningkatan Mutu Sekolah"       → [0.21, -0.39, 0.85, ..., 0.15]  (384 angka)
+"Pengadaan Kapal Patroli Laut"   → [-0.67, 0.92, -0.33, ..., 0.44] (384 angka)
+```
+
+**Cosine similarity** mengukur "sudut" antara dua vektor — hasil 0–100:
+- 85–100 → teks sangat mirip secara semantik
+- 50–84  → berkaitan, tapi tidak spesifik sama
+- 20–49  → hubungan lemah atau berbeda domain
+- 0–19   → tidak ada keterkaitan yang terdeteksi
+
+> **Penting:** Model ini tidak tahu aturan anggaran pemerintah. Ia tidak mengetahui bahwa "KP 04.01.01" berkaitan dengan pendidikan. Yang ia ketahui adalah kemiripan semantik antar teks — dan dari kemiripan itu kita inferensikan "keselarasan kebijakan".
+
+---
+
+### 2. "Normal" Tidak Didefinisikan Secara Absolut — Melainkan oleh Distribusi Data
+
+Ini adalah titik yang paling sering disalahpahami. **Sistem ini tidak menetapkan "skor 75 = wajar, skor 60 = anomali" secara manual.** Mengapa tidak?
+
+Karena nomenklatur DIPA dan RPJMN secara sistematis berbeda. DIPA menggunakan bahasa birokrasi pelaksanaan ("Layanan Pembiayaan Pendidikan", "Pengelolaan Dana BOS"), sementara RPJMN menggunakan bahasa perencanaan strategis ("Perluasan Layanan PAUD", "Penguatan Ekosistem Pendidikan"). Kedua dokumen berbicara tentang hal yang sama tapi dengan register bahasa yang berbeda. Jika kita menetapkan threshold absolut "skor < 60 = anomali", hampir semua item DIPA akan terlihat anomali — meski substansinya selaras.
+
+**Solusinya: threshold berbasis persentil dari distribusi aktual seluruh data.**
+
+```
+Distribusi skor cosine similarity untuk 7.235 unique alignment texts DIPA 2026:
+
+  P5   P15   P50  P85   P95
+  │     │     │    │     │
+──┤─────┤─────┤────┤─────┤──
+ 30    41    58   71    78    (skor 0-100)
+
+Artinya:
+  P85 ke atas (≥ 71) → strong alignment   [top 15% dari semua item]
+  P50 – P85  (58–71) → moderate alignment
+  P15 – P50  (41–58) → weak alignment     ← anomali kandidat
+  < P15      (< 41)  → sangat lemah       ← kandidat policy_orphan
+```
+
+Jika tahun depan semua item DIPA kebetulan mendapat skor lebih tinggi karena nomenklaturnya lebih selaras, maka P15 dan P85 akan bergeser ke atas secara otomatis. **Threshold menyesuaikan dengan karakteristik data aktual, bukan dipatok dari ekspektasi luar.**
+
+---
+
+### 3. Tiga Jenis Baseline "Normal" yang Digunakan
+
+| # | Digunakan Pada | Definisi "Normal" | Penjelasan |
+|---|---------------|-------------------|-----------|
+| **1** | Policy Alignment (Fase 9) | Persentil ke-15 sampai ke-85 dari distribusi cosine similarity seluruh 7.235 item | "Normal" = berada di kisaran tengah dari populasi data aktual. Bukan angka yang ditetapkan panitia. |
+| **2** | Koherensi L1/L2 (Fase 12) | Persentil ke-5 dari distribusi cosine similarity seluruh pasangan (program, kegiatan) atau (kegiatan, output) di DIPA | "Normal" = 95% pasangan teks dalam dataset itu sendiri. Yang 5% terbawah dianggap tidak koheren. |
+| **3** | Koherensi L3 (Fase 12) | Rata-rata komposisi akun K/L **lain** yang mengerjakan output berkode sama | "Normal" = cara mayoritas K/L sejawat (peer) membelanjakan anggaran untuk output yang identik. Bukan aturan tertulis — melainkan norma empiris. |
+
+---
+
+### 4. Satu-satunya Nilai Absolut: Safety Net untuk Policy Orphan
+
+Satu pengecualian terhadap pendekatan relatif di atas: **ABS_FLOOR = 45.0** untuk klasifikasi `policy_orphan`.
+
+Tanpa floor ini, item yang punya rank sangat rendah tapi skor 45–50 (masih ada relevansi, hanya nomenklatur jauh berbeda) akan salah diklasifikasikan sebagai "orphan total". Verifikasi manual menemukan bahwa item semacam ini bukan tanpa hubungan — hanya bahasa DIPA-nya jauh dari bahasa RPJMN.
+
+```python
+# Dual condition: rendah RELATIF (rank < P15) DAN rendah ABSOLUT (skor < 45)
+if rank < P15 AND best_score < 45.0:
+    → policy_orphan   # benar-benar tidak ada KP RPJMN/RKP yang relevan
+
+if rank < P15 AND best_score >= 45.0:
+    → weak_alignment  # ada relevansi, tapi nomenklatur sangat berbeda
+```
+
+Contoh: *"Wajib Belajar 13 Tahun"* (Kemendikdasmen) mendapat rank P12 tapi skor 47 — artinya ada relevansi semantik, hanya istilahnya tidak muncul persis di RPJMN. Ini `weak_alignment`, bukan `orphan`.
+
+---
+
+### 5. Mengapa Tidak Cukup Angka Saja: Peran TreasurAI
+
+Bahkan dengan distribusi yang tepat dan peer comparison yang baik, angka tidak bisa menjawab pertanyaan seperti: *"Badan Gizi Nasional mengalokasikan 100% anggaran ke Belanja Bansos — apakah ini anomali atau memang tugasnya?"*
+
+Jawaban membutuhkan konteks: RPJMN memang menugaskan BGN sebagai pelaksana program Makan Bergizi Gratis (KP 04.12.01), yang memang berbentuk Bansos. Ini **false positive** jika dilihat dari angka saja.
+
+TreasurAI OSS 120B bertugas melakukan **judgment kualitatif** ini — dan selalu di-inject dengan konteks mandat K/L dari knowledge graph RPJMN/RKP, sehingga ia tidak bergantung pada pengetahuan umum saja.
+
+```
+Skor tinggi TVD  →  sistem flag "anomali komposisi akun"
+        ↓
+TreasurAI + konteks mandat K/L
+        ↓
+verdict: "false_positive" (sesuai RPJMN) / "valid" / "manual_review"
+```
 
 ---
 
@@ -824,6 +924,91 @@ Bobot L3 lebih tinggi (0.25) karena peer comparison lintas K/L memberikan sinyal
 ### Penjelasan Konseptual
 
 Bayangkan sistem ini seperti seorang auditor berpengalaman yang memeriksa laporan keuangan dari tiga sudut sekaligus. **Level 1** memeriksa apakah nama kegiatan masuk akal untuk program yang menaunginya — seperti mengecek apakah isi bab sesuai dengan judul bab. **Level 2** memeriksa apakah output yang dihasilkan masuk akal untuk kegiatan yang menghasilkannya — seperti mengecek apakah kesimpulan bab konsisten dengan isinya. **Level 3** yang paling unik: ia tidak menggunakan teks sama sekali, melainkan membandingkan *perilaku belanja* suatu K/L dengan K/L-K/L lain yang mengerjakan hal yang sama. Jika hampir semua K/L yang membangun jalan mengalokasikan ~80% untuk Belanja Modal, tapi satu K/L hanya 5% Modal, itu sinyal kuat bahwa ada yang tidak wajar — bukan karena teksnya salah, melainkan karena polanya berbeda dari norma. Ini adalah pendekatan peer comparison yang lazim digunakan dalam audit keuangan, diterapkan secara otomatis pada 1,5 juta baris anggaran.
+
+---
+
+## Ringkasan Kriteria Deteksi Anomali
+
+> Semua kriteria berikut bekerja secara otomatis pada **1.504.455 baris** data DIPA 2026. Hasilnya kemudian di-review oleh TreasurAI (reasoning kualitatif) dan tersedia untuk validasi manusia.
+
+### Jalur 1 — Keselarasan Kebijakan (Policy Alignment)
+
+**Pertanyaan:** Apakah program/kegiatan/output dalam DIPA 2026 dapat dikaitkan dengan Kegiatan Prioritas (KP) dalam RPJMN/RKP?
+
+**Metode:** Cosine similarity antara teks DIPA (program + kegiatan + output) dan 753 KP RPJMN/RKP via model embedding e5-small.
+
+| Jenis Anomali | Kriteria Teknis | Artinya | Jumlah (2026) |
+|--------------|----------------|---------|--------------|
+| `policy_orphan` | rank < P15 **DAN** skor absolut < 45 | Tidak ada KP RPJMN/RKP yang semantik relevan. Belanja ini tidak bisa dikaitkan ke prioritas nasional manapun. | 1 item |
+| `weak_alignment` | rank < P15 **ATAU** (rank < P50 dengan indikasi lemah) | Ada KP yang paling dekat, tapi keterkaitan semantiknya lemah. Bisa berarti nomenklatur berbeda, bisa berarti memang melenceng. | 1.541 item |
+| `routine` | kode output EB-series (internal) atau K/L 999 (BAUN) | Belanja administratif/rutin atau lintas K/L — bukan sasaran analisis keselarasan kebijakan. | Dieksklusikan |
+| `aligned` | rank ≥ P15 | Keselarasan cukup — tidak masuk radar anomali Jalur 1. | Mayoritas |
+
+**Catatan penting:** 1.542 item anomali (1 orphan + 1.541 weak) **semuanya** sudah di-reasoning oleh TreasurAI OSS 120B — dengan konteks mandat K/L dari RPJMN/RKP — sehingga setiap item memiliki `treasurai_verdict`: `valid` / `false_positive` / `manual_review`.
+
+---
+
+### Jalur 2 — Koherensi Semantik Internal (L1 & L2)
+
+**Pertanyaan:** Apakah nama-nama yang digunakan di dalam struktur DIPA sendiri konsisten satu sama lain?
+
+**Metode:** Cosine similarity antara pasangan teks internal DIPA; threshold = persentil ke-5 dari distribusi pasangan aktual.
+
+| Level | Pertanyaan | Kriteria Teknis | Artinya | Jumlah Baris Terdampak |
+|-------|-----------|----------------|---------|----------------------|
+| **L1** | Apakah nama kegiatan konsisten dengan nama program yang menaunginya? | Cosine similarity (program, kegiatan) < P5 dari distribusi seluruh pasangan | Nama kegiatan "tidak nyambung" dengan programnya — mungkin salah penempatan, mungkin nomenklatur tidak konsisten. | 14.272 baris |
+| **L2** | Apakah output yang dihasilkan konsisten dengan kegiatan yang menghasilkannya? | Cosine similarity (kegiatan, output) < P5 dari distribusi seluruh pasangan | Output yang dihasilkan tidak mencerminkan apa yang dilakukan kegiatannya. | 16.310 baris |
+
+**Pengecualian yang berlaku:**
+- L1: Program "Dukungan Manajemen" dikecualikan — catch-all administratif, L1 tidak bermakna.
+- L2: K/L 012 (Kemhan) + 060 (Polri) untuk output domain pertahanan/keamanan operasional dikecualikan — jargon militer teknis under-scored secara semantik. Output generik (`layanan perkantoran`, `administrasi umum`, dll.) juga dikecualikan.
+
+---
+
+### Jalur 3 — Koherensi Peer Komposisi Akun (L3)
+
+**Pertanyaan:** Apakah cara suatu K/L membelanjakan uangnya untuk output tertentu normal dibandingkan K/L lain yang mengerjakan output berkode sama?
+
+**Metode:** Total Variation Distance (TVD) antara distribusi akun 2-digit K/L tersebut vs rata-rata K/L peer (K/L lain dengan `outputkro_kode` yang sama, minimal 5 peer).
+
+```
+TVD = 0,5 × Σ |porsi_akun_sendiri − rata_rata_porsi_peer|
+
+Contoh: K/L ini = {Modal: 95%, Barang: 5%}
+        Rata peer = {Modal: 10%, Barang: 85%, Pegawai: 5%}
+        TVD = 0,5 × (|0.95-0.10| + |0.05-0.85| + |0-0.05|) = 0,85 → flagged
+```
+
+| Jenis Output | Threshold TVD | Alasan Perbedaan |
+|-------------|--------------|-----------------|
+| Output reguler (non-EB) | ≥ 0,40 | Standar: output dengan nama dan fungsi sama seharusnya dibelanjakan dengan pola serupa. |
+| Output internal (EB-series) | ≥ 0,65 | EB-series (EBA/EBB/EBC/EBD) secara alami lebih bervariasi antar K/L karena bersifat dukungan internal yang berbeda konteks organisasi. |
+| < 5 peer K/L | Tidak di-flag | Tidak cukup K/L lain untuk membentuk profil norma yang representatif. |
+
+**Anomali L3 yang ditemukan (2026):** 142.384 baris; diringkas ke ~1.101 kombinasi unik (K/L, program, kegiatan, output) yang punya deviasi signifikan.
+
+---
+
+### Gambaran Lengkap: Berapa yang Masuk Radar?
+
+```
+1.504.455 baris DIPA 2026
+        │
+        ├─ Jalur 1 (Policy Alignment):    1.542 anomali dengan reasoning TreasurAI
+        │    └─ policy_orphan: 1  │  weak_alignment: 1.541
+        │
+        ├─ Jalur 2 (Koherensi L1):       14.272 baris (di-aggregate ke output unik untuk tampilan)
+        │
+        ├─ Jalur 2 (Koherensi L2):       16.310 baris (di-aggregate ke output unik untuk tampilan)
+        │
+        └─ Jalur 3 (Koherensi L3):      142.384 baris → ~1.101 output unik dengan TVD tinggi
+                                          (19.235 baris top-pagu dengan reasoning TreasurAI)
+```
+
+**Yang ditampilkan di SENTINEL (peta anomali interaktif):**
+- Tab "Keselarasan RPJMN/RKP": 1.542 item Jalur 1 yang sudah ada reasoning-nya
+- Tab "Koherensi Akun" → L3: ~1.101 kombinasi unik L3 (Rp 520 T)
+- Tab "Koherensi Akun" → L1/L2 Semantik: 325 kombinasi unik L1/L2 (Rp 4 T)
 
 ---
 

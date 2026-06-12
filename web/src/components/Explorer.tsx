@@ -28,7 +28,7 @@ const COH_FILTERS: { key: CohFilter; label: string }[] = [
 ];
 
 export default function Explorer({ manifest, nodes, embed }: Props) {
-  const [dataset, setDataset]       = useState<"coherence" | "alignment">("coherence");
+  const [dataset, setDataset]       = useState<"coherence" | "alignment">("alignment");
   const [cohFilter, setCohFilter]   = useState<CohFilter>("all");
   const [alignNodes, setAlignNodes] = useState<BubbleNode[] | null>(null);
   const [alignErr, setAlignErr]     = useState<string | null>(null);
@@ -96,7 +96,7 @@ export default function Explorer({ manifest, nodes, embed }: Props) {
     <div className="flex h-full w-full flex-col">
       {/* Dataset toggle */}
       <div className="flex shrink-0 items-center gap-1 border-b border-ink-800 bg-ink-950 px-3 py-1.5">
-        {(["coherence", "alignment"] as const).map((ds) => {
+        {(["alignment", "coherence"] as const).map((ds) => {
           const isActive = dataset === ds;
           const count    = ds === "coherence" ? nodes.length : (alignNodes?.length ?? alignCount);
           const label    = ds === "coherence" ? "Koherensi Akun" : "Keselarasan RPJMN/RKP";
