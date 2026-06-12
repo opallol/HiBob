@@ -73,11 +73,21 @@ export default function DetailCard({ detail, loading, manifest, onClose }: Props
 
               {(() => {
                 const isAlign = detail.dataset === "alignment";
+                const isSem   = detail.nature === "l1" || detail.nature === "l2" || detail.nature === "l1l2";
+                const semScore = isSem
+                  ? Math.min(detail.own["l1"] ?? 100, detail.own["l2"] ?? 100)
+                  : 0;
                 const stats = isAlign
                   ? [
                       { v: `${(detail.own["skor"] ?? 0).toFixed(0)}/100`, l: "keselarasan" },
                       { v: rupiahT(detail.pagu).replace("Rp ", ""), l: "pagu" },
                       { v: `${detail.dev.toFixed(0)}`, l: "skor anomali" },
+                    ]
+                  : isSem
+                  ? [
+                      { v: `${semScore.toFixed(0)}/100`, l: "koherensi" },
+                      { v: rupiahT(detail.pagu).replace("Rp ", ""), l: "pagu" },
+                      { v: (detail.nature ?? "").toUpperCase(), l: "level" },
                     ]
                   : [
                       { v: `${detail.dev.toFixed(0)}%`, l: "deviasi" },
@@ -116,7 +126,7 @@ export default function DetailCard({ detail, loading, manifest, onClose }: Props
 
               <p className="mt-3 text-[12px] leading-relaxed text-slate-300">{detail.rs}</p>
 
-              {detail.dataset !== "alignment" && (
+              {detail.dataset !== "alignment" && detail.nature !== "l1" && detail.nature !== "l2" && detail.nature !== "l1l2" && (
                 <div className="mt-4">
                   <div className="text-[11px] text-slate-400 mb-2">Komposisi akun</div>
                   <CompBars detail={detail} akun={manifest.akun} />

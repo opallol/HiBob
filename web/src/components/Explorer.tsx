@@ -57,7 +57,7 @@ export default function Explorer({ manifest, nodes, embed }: Props) {
   function handleDataset(ds: "coherence" | "alignment") {
     if (ds === dataset) return;
     setDataset(ds);
-    setMode(ds === "alignment" ? "v" : "pat");
+    setMode("pat");
     setSelectedId(null);
     setDetail(null);
   }

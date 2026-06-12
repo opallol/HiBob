@@ -101,8 +101,15 @@ def build_mandat_index(cur):
     return idx
 
 
+SEM_PATTERNS = {
+    "l1":   "Semantik Program-Kegiatan",
+    "l2":   "Semantik Kegiatan-Output",
+    "l1l2": "Semantik Program+Kegiatan+Output",
+}
+
+
 def export_coherence(cur, mandat_idx):
-    """Node bubble + detail per output anomali L3 (akun_komposisi_score >= 40)."""
+    """Node bubble + detail per output anomali L3 + L1/L2 semantik."""
     cur.execute(f"""
         SELECT
             ca.kementerian_kode, ca.program_kode, ca.kegiatan_kode, ca.outputkro_kode,
@@ -172,12 +179,89 @@ def export_coherence(cur, mandat_idx):
             "mandat": mandat_idx.get(kl, []),
         }
 
+    # --- L1/L2 semantik: output yang belum masuk L3 ---
+    cur.execute(f"""
+        SELECT
+            kementerian_kode, program_kode, kegiatan_kode, outputkro_kode,
+            MAX(kementerian_uraian), MAX(program_uraian),
+            MAX(kegiatan_uraian),   MAX(outputkro_uraian),
+            SUM(total_pagu),
+            ROUND(MIN(prog_keg_coherence), 1),
+            ROUND(MIN(keg_out_coherence),  1),
+            MAX(CASE WHEN JSON_CONTAINS(anomaly_flags, '"level1_program_kegiatan_lemah"') THEN 1 ELSE 0 END),
+            MAX(CASE WHEN JSON_CONTAINS(anomaly_flags, '"level2_kegiatan_output_lemah"')  THEN 1 ELSE 0 END),
+            MAX(treasurai_verdict), MAX(llm_model), MAX(llm_reasoning)
+        FROM {T_COH}
+        WHERE JSON_CONTAINS(anomaly_flags, '"level1_program_kegiatan_lemah"')
+           OR JSON_CONTAINS(anomaly_flags, '"level2_kegiatan_output_lemah"')
+        GROUP BY kementerian_kode, program_kode, kegiatan_kode, outputkro_kode
+        HAVING MAX(CASE WHEN JSON_CONTAINS(anomaly_flags, '"level3_akun_tidak_lazim"') THEN 1 ELSE 0 END) = 0
+        ORDER BY SUM(total_pagu) DESC
+    """)
+    l12_rows = cur.fetchall()
+    existing_ids = {n["id"] for n in nodes}
+
+    for (kl, prog, keg, out,
+         kl_name, prog_name, keg_name, out_name,
+         pagu, l1_score, l2_score, has_l1, has_l2,
+         verdict, model, reasoning) in l12_rows:
+
+        nid = "%s-%s-%s-%s" % (kl, prog, keg, out)
+        if nid in existing_ids:
+            continue
+        existing_ids.add(nid)
+
+        if has_l1 and has_l2:
+            pkey = "l1l2"
+        elif has_l1:
+            pkey = "l1"
+        else:
+            pkey = "l2"
+
+        sem_score = min(s for s in [l1_score, l2_score] if s is not None)
+        v = VERDICT_MAP.get((verdict or "").strip(), "unclear")
+        kl_names[kl] = (kl_name or "")[:60]
+        patterns[pkey] = SEM_PATTERNS[pkey]
+
+        nodes.append({
+            "id":   nid,
+            "kl":   kl,
+            "nm":   ("%s · %s" % (out or "-", (out_name or "")[:48])).strip(),
+            "pagu": round(float(pagu or 0), 2),
+            "v":    v,
+            "pat":  pkey,
+            "dev":  round(float(sem_score or 0), 1),
+            "peer": 0,
+        })
+
+        details_by_kl[kl][nid] = {
+            "kl":     kl,
+            "kln":    (kl_name or "")[:80],
+            "prog":   ("%s · %s" % (prog, (prog_name or "")[:70])).strip(),
+            "keg":    ("%s · %s" % (keg,  (keg_name or "")[:70])).strip(),
+            "out":    ("%s · %s" % (out or "-", (out_name or "")[:70])).strip(),
+            "pagu":   round(float(pagu or 0), 2),
+            "dev":    round(float(sem_score or 0), 1),
+            "pc":     0,
+            "own":    {
+                **({"l1": float(l1_score)} if l1_score is not None else {}),
+                **({"l2": float(l2_score)} if l2_score is not None else {}),
+            },
+            "peer":   {},
+            "v":      v,
+            "md":     model or "oss120b",
+            "rs":     (reasoning or "")[:1600],
+            "mandat": mandat_idx.get(kl, []),
+            "nature": pkey,
+        }
+
     write_json(os.path.join(COH_DIR, "nodes.json"), nodes)
     for kl, det in details_by_kl.items():
         write_json(os.path.join(DET_DIR, "%s.json" % kl), det)
 
-    print("  coherence: %d node, %d K/L detail, %d pola" % (
-        len(nodes), len(details_by_kl), len(patterns)))
+    n_l12 = sum(1 for n in nodes if n["pat"] in SEM_PATTERNS)
+    print("  coherence: %d node (%d L3 + %d L1/L2), %d K/L detail, %d pola" % (
+        len(nodes), len(nodes) - n_l12, n_l12, len(details_by_kl), len(patterns)))
     return nodes, patterns, kl_names, CAT
 
 
