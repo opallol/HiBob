@@ -10,6 +10,9 @@ Idempotent: safe to re-run after 11_treasurai_reasoning.py adds new reasoning.
 """
 from common.db import get_connection
 from common.verdict import parse_verdict
+from common.config import TABLE_ANOMALY
+
+T_ANOMALY = TABLE_ANOMALY
 
 
 def column_exists(cur, table, column):
@@ -25,10 +28,10 @@ def main():
     conn = get_connection()
     cur = conn.cursor()
 
-    if not column_exists(cur, "ddac_anomaly_2026", "treasurai_verdict"):
+    if not column_exists(cur, T_ANOMALY, "treasurai_verdict"):
         print("Adding column treasurai_verdict ...")
         cur.execute(
-            "ALTER TABLE ddac_anomaly_2026 "
+            f"ALTER TABLE {T_ANOMALY} "
             "ADD COLUMN treasurai_verdict VARCHAR(20) NULL AFTER llm_model"
         )
         conn.commit()
@@ -36,7 +39,7 @@ def main():
         print("Column treasurai_verdict already exists.")
 
     cur.execute(
-        "SELECT id, llm_reasoning FROM ddac_anomaly_2026 WHERE llm_reasoning IS NOT NULL"
+        f"SELECT id, llm_reasoning FROM {T_ANOMALY} WHERE llm_reasoning IS NOT NULL"
     )
     rows = cur.fetchall()
     print(f"Reasoned anomalies to classify: {len(rows)}")
@@ -46,7 +49,7 @@ def main():
         v = parse_verdict(reason)
         counts[v] = counts.get(v, 0) + 1
         cur.execute(
-            "UPDATE ddac_anomaly_2026 SET treasurai_verdict=%s WHERE id=%s", (v, aid)
+            f"UPDATE {T_ANOMALY} SET treasurai_verdict=%s WHERE id=%s", (v, aid)
         )
     conn.commit()
 
@@ -55,7 +58,7 @@ def main():
     #   valid          -> 'confirmed'  (real anomaly worth follow-up)
     #   manual_review  -> 'needs_review'
     cur.execute(
-        """UPDATE ddac_anomaly_2026
+        f"""UPDATE {T_ANOMALY}
            SET review_status = CASE treasurai_verdict
                  WHEN 'false_positive' THEN 'dismissed'
                  WHEN 'valid'          THEN 'confirmed'
@@ -71,8 +74,8 @@ def main():
         print(f"  {v:<16} {counts[v]:>5} ({counts[v]/total*100:.0f}%)")
 
     cur.execute(
-        """SELECT review_status, COUNT(*), ROUND(SUM(total_pagu)/1e12,1)
-           FROM ddac_anomaly_2026 WHERE treasurai_verdict IS NOT NULL
+        f"""SELECT review_status, COUNT(*), ROUND(SUM(total_pagu)/1e12,1)
+           FROM {T_ANOMALY} WHERE treasurai_verdict IS NOT NULL
            GROUP BY review_status ORDER BY 2 DESC"""
     )
     print("\n=== review_status after sync (pagu in Rp T) ===")

@@ -11,7 +11,7 @@ export const VERDICT_LABEL: Record<VerdictKey, string> = {
   valid: "Anomali valid",
   review: "Perlu review",
   fp: "False positive",
-  unclear: "Belum jelas",
+  unclear: "Tidak ditemukan anomali",
 };
 
 // urutan kepentingan: valid (fokus) → review → fp → unclear

@@ -353,7 +353,7 @@ Padahal nama yang diinginkan hanyalah: `"Pengelolaan Keamanan Laut"`
 
 ### Penjelasan Konseptual
 
-Ketika mesin membaca PDF dan menarik nama entitas, ia tidak tahu persis di mana nama berakhir dan deskripsi teknis dimulai. Hasilnya, nama yang diekstrak sering membawa "ekor" yang panjang — berisi sasaran, indikator, target angka, dan alokasi anggaran yang seharusnya bukan bagian dari nama. Ini menyulitkan tampilan di dashboard dan menyulitkan pencocokan nama. Fase ini membersihkan ekor tersebut secara deterministik: cukup potong di kata penanda tertentu, pisah kata yang menempel, rapikan spasi. Tidak ada AI yang diperlukan karena polanya sangat konsisten — dan pendekatan deterministik jauh lebih dapat dipercaya untuk data struktural daripada LLM yang bisa menginterpretasikan ulang makna.
+Ketika mesin membaca PDF dan menarik nama entitas, ia tidak tahu persis di mana nama berakhir dan deskripsi teknis dimulai. Hasilnya, nama yang diekstrak sering membawa "ekor" yang panjang — berisi sasaran, indikator, target angka, dan alokasi anggaran yang seharusnya bukan bagian dari nama. Ini menyulitkan tampilan visual dan menyulitkan pencocokan nama. Fase ini membersihkan ekor tersebut secara deterministik: cukup potong di kata penanda tertentu, pisah kata yang menempel, rapikan spasi. Tidak ada AI yang diperlukan karena polanya sangat konsisten — dan pendekatan deterministik jauh lebih dapat dipercaya untuk data struktural daripada LLM yang bisa menginterpretasikan ulang makna.
 
 ---
 

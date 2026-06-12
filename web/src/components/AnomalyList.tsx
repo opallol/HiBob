@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { BubbleNode, Manifest, ModeKey } from "../types";
-import { VERDICT_COLOR, rupiahShort, CLUSTER_ACCENT } from "../theme";
+import { VERDICT_COLOR, VERDICT_LABEL, rupiahShort, CLUSTER_ACCENT } from "../theme";
 
 interface Props {
   nodes: BubbleNode[];
@@ -16,14 +16,27 @@ function keyOf(n: BubbleNode, mode: ModeKey): string {
   return n.pat;
 }
 function labelOf(key: string, mode: ModeKey, m: Manifest): string {
-  if (mode === "v") return m.verdicts.find((x) => x.key === key)?.label ?? key;
+  if (mode === "v") return VERDICT_LABEL[key as keyof typeof VERDICT_LABEL] ?? key;
   if (mode === "kl") return `${key} ${m.kls[key] ?? ""}`.trim();
   return m.patterns[key] ?? key;
+}
+
+// teks lengkap (tak terpotong) untuk tooltip baris
+function fullLabelOf(n: BubbleNode, m: Manifest): string {
+  const kl = `${n.kl} ${m.kls[n.kl] ?? ""}`.trim();
+  return `${kl} · ${n.nm}`;
 }
 
 export default function AnomalyList({ nodes, mode, manifest, selectedId, onSelect }: Props) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null);
+
+  const showTip = (e: React.MouseEvent, text: string) =>
+    setTip({ x: e.clientX, y: e.clientY, text });
+  const moveTip = (e: React.MouseEvent) =>
+    setTip((t) => (t ? { ...t, x: e.clientX, y: e.clientY } : t));
+  const hideTip = () => setTip(null);
 
   const groups = useMemo(() => {
     const map = new Map<string, BubbleNode[]>();
@@ -60,6 +73,9 @@ export default function AnomalyList({ nodes, mode, manifest, selectedId, onSelec
   const Row = ({ n, rank }: { n: BubbleNode; rank?: number }) => (
     <button
       onClick={() => onSelect(n)}
+      onMouseEnter={(e) => showTip(e, fullLabelOf(n, manifest))}
+      onMouseMove={moveTip}
+      onMouseLeave={hideTip}
       className={`flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors ${
         selectedId === n.id ? "bg-ink-700/70" : "hover:bg-ink-800/60"
       }`}
@@ -118,6 +134,9 @@ export default function AnomalyList({ nodes, mode, manifest, selectedId, onSelec
                       return ns;
                     })
                   }
+                  onMouseEnter={(e) => showTip(e, labelOf(g.key, mode, manifest))}
+                  onMouseMove={moveTip}
+                  onMouseLeave={hideTip}
                   className="flex w-full items-center gap-2 px-3.5 py-2 text-left hover:bg-ink-800/40"
                 >
                   <span className="h-2 w-2 rounded-full" style={{ background: accent }} />
@@ -149,6 +168,18 @@ export default function AnomalyList({ nodes, mode, manifest, selectedId, onSelec
       <div className="border-t border-ink-800 px-3.5 py-2 text-[10px] text-ink-600">
         {groups.length} cluster · total {rupiahShort(totalPagu)}
       </div>
+
+      {tip && (
+        <div
+          className="pointer-events-none fixed z-50 max-w-[340px] rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 text-[11px] leading-snug text-slate-200 shadow-xl"
+          style={{
+            left: Math.min(tip.x + 14, window.innerWidth - 356),
+            top: Math.min(tip.y + 14, window.innerHeight - 80),
+          }}
+        >
+          {tip.text}
+        </div>
+      )}
     </div>
   );
 }

@@ -10,8 +10,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-from common.config import TREASURAI_BASE_URL, TREASURAI_API_KEY, TREASURAI_MODELS
+from common.config import TREASURAI_BASE_URL, TREASURAI_API_KEY, TREASURAI_MODELS, TABLE_COHERENCE, TABLE_COHERENCE_AKUN
 from common.db import get_connection
+
+T_COH      = TABLE_COHERENCE
+T_COH_AKUN = TABLE_COHERENCE_AKUN
 from common.verdict import parse_verdict
 from common.kl_context import get_kl_mandate_context
 
@@ -94,7 +97,7 @@ def main():
     conn = get_connection()
     cur  = conn.cursor()
 
-    cur.execute("""
+    cur.execute(f"""
         SELECT
             ca.kementerian_kode,
             MAX(c.kementerian_uraian)   AS kl_name,
@@ -108,8 +111,8 @@ def main():
             ca.peer_count,
             ca.akun_detail,
             SUM(c.total_pagu)           AS total_pagu
-        FROM ddac_coherence_akun_2026 ca
-        JOIN ddac_coherence_2026 c
+        FROM {T_COH_AKUN} ca
+        JOIN {T_COH} c
           ON  c.kementerian_kode = ca.kementerian_kode
           AND c.program_kode     = ca.program_kode
           AND c.kegiatan_kode    = ca.kegiatan_kode
@@ -166,8 +169,8 @@ def main():
         result = call_treasurai(prompt)
         if result:
             reasoning, verdict, status = result
-            cur.execute("""
-                UPDATE ddac_coherence_2026
+            cur.execute(f"""
+                UPDATE {T_COH}
                 SET llm_reasoning=%s, llm_model=%s,
                     treasurai_verdict=%s, review_status_coherence=%s
                 WHERE kementerian_kode=%s AND program_kode=%s
@@ -180,9 +183,9 @@ def main():
         time.sleep(0.3)
 
     print("\n" + "=" * 60)
-    print("FINAL STATUS ddac_coherence_2026 — L3")
+    print(f"FINAL STATUS {T_COH} — L3")
     print("=" * 60)
-    cur.execute("""
+    cur.execute(f"""
         SELECT
             SUM(CASE WHEN JSON_CONTAINS(anomaly_flags, JSON_QUOTE('level3_akun_tidak_lazim'))
                      THEN 1 ELSE 0 END),
@@ -190,7 +193,7 @@ def main():
                       AND llm_reasoning IS NOT NULL THEN 1 ELSE 0 END),
             SUM(CASE WHEN JSON_CONTAINS(anomaly_flags, JSON_QUOTE('level3_akun_tidak_lazim'))
                       AND llm_model = %s THEN 1 ELSE 0 END)
-        FROM ddac_coherence_2026
+        FROM {T_COH}
     """, (MODEL,))
     r = cur.fetchone()
     print("  L3 total    : %s baris" % format(r[0], ","))

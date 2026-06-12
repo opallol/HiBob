@@ -29,7 +29,7 @@ DeepSeek Policy KMS adalah knowledge management system yang dibangun untuk menya
 | 12 | Coherence (jenis komponen) | ✅ DONE | 1.5M baris |
 | 13 | Koherensi 3 Level | ✅ DONE | Level 1/2/3 + peer comparison |
 | 14 | Bersih Nama Simpul | ✅ DONE | 753 KP + 43 PN (167 PP via node_name) |
-| 15 | Dashboard | ✅ DONE | FastAPI + vis-network (5 tab) |
+| 16 | Web Visualisasi | ✅ DONE | Peta anomali bubblemaps (Vite + React, statis) |
 
 ---
 
@@ -59,7 +59,7 @@ DeepSeek Policy KMS adalah knowledge management system yang dibangun untuk menya
 | Semantic search | No (0 embeddings) | Yes (e5-small runtime) |
 | K/L mapping | Not parsed | 604 penugasan (72 K/L) |
 | Project documentation | None | README + ARCH + SCHEMA + MASTER + COMPARE |
-| Self-contained deploy | No | Yes (14 script + common + dashboard) |
+| Self-contained deploy | No | Yes (17 script + common + web visualisasi) |
 
 ### Critical Codex Gaps
 
@@ -187,7 +187,7 @@ python scripts\07_generate_embeddings.py
 ### Long-term (done)
 1. ✅ Anomaly detection pada ringkasan_pagu (1 orphan + 1,541 weak + TreasurAI 389 items)
 2. ✅ Koherensi internal 3 level (program↔kegiatan↔output↔akun, peer comparison)
-3. ✅ Dashboard knowledge graph + anomali (FastAPI + vis-network; akan dirombak ke PHP)
+3. ✅ Web visualisasi peta anomali + knowledge graph (Vite + React, statis embeddable)
 
 ---
 
@@ -214,13 +214,13 @@ berisi 98% Belanja Modal (akun 53) padahal ~0% di 99 K/L peer; output
 `14_fix_node_names.py` membersihkan blob nama hasil ekstraksi PDF ke
 `clean_node_name_ai` (753 KP + 43 PN), deterministik via regex (potong sasaran +
 unglue camelCase + pisah kata sambung). 167 PP langsung memakai `node_name`
-(nama PP sudah bersih). Dashboard memakai `COALESCE(clean_node_name_ai, node_name)`.
+(nama PP sudah bersih). Ekspor web memakai `COALESCE(clean_node_name_ai, node_name)`.
 
-### Dashboard
+### Web Visualisasi (Peta Anomali)
 
-FastAPI + vis-network, 5 tab (Ringkasan, Knowledge Graph, Anomali Keselarasan,
-Anomali Koherensi 3 level + peer, Penugasan K/L). Jalankan:
-`python -m uvicorn app:app --port 8123` di folder `dashboard`.
+Peta anomali interaktif gaya bubblemaps (Vite + React + Tailwind +
+react-force-graph-2d), **statis tanpa backend**. Ekspor data:
+`python scripts/16_export_web.py` → build: `cd web && npm run build` → `web/dist/`.
 
 ---
 
@@ -269,5 +269,5 @@ dimensi:
 7. **K/L Assignment** → 604 penugasan, 72 K/L (Codex 0).
 8. **Documentation** → README + ARCHITECTURE + SCHEMA + MASTER + COMPARISON.
 
-Pipeline self-contained: 14 script + dashboard + modul bersama `scripts/common`.
+Pipeline self-contained: 17 script + web visualisasi + modul bersama `scripts/common`.
 Total pagu APBN 2026 tercakup: Rp 3,559.7 T.

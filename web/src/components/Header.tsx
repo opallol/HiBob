@@ -11,11 +11,16 @@ export default function Header({ manifest, view, onView }: Props) {
   return (
     <header className="flex shrink-0 items-center justify-between border-b border-ink-800 bg-ink-900/80 px-5 py-3 backdrop-blur">
       <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-sm font-semibold text-white">
-          DA
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-sm font-semibold tracking-tight text-white">
+          SN
         </div>
         <div>
-          <div className="text-[14px] font-medium leading-tight text-slate-100">{manifest.title}</div>
+          <div className="flex items-baseline gap-2 leading-tight">
+            <span className="text-[15px] font-semibold tracking-tight text-slate-100">SENTINEL</span>
+            <span className="hidden text-[10px] text-ink-600 sm:inline">
+              Spending Intelligence for National Alignment Review
+            </span>
+          </div>
           <div className="text-[11px] text-ink-600">
             {manifest.totals.anomaly_nodes} anomali · {rupiahT(manifest.totals.total_pagu)} · {manifest.totals.kl} K/L
           </div>

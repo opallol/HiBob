@@ -3,8 +3,13 @@ Phase 0: Read-only DB status check.
 Verifies the real state of the deepseek-kms pipeline by counting rows
 and key fields across all tables. Does NOT modify anything.
 """
-from common.config import DB_CONFIG as DB
+from common.config import DB_CONFIG as DB, TABLE_PAGU_AKUN, TABLE_ANOMALY, TABLE_COHERENCE, TABLE_KMPNEN
 from common.db import get_connection
+
+T_PAGU    = TABLE_PAGU_AKUN
+T_ANOMALY = TABLE_ANOMALY
+T_COH     = TABLE_COHERENCE
+T_KMPNEN  = TABLE_KMPNEN
 
 
 def scalar(cur, sql):
@@ -48,10 +53,10 @@ def main():
         "deepseek_policy_table_rows",
         "deepseek_policy_embeddings",
         "deepseek_policy_kl_assignments",
-        "ddac_pagu_akun_2026",
-        "t_kmpnen_2026",
-        "ddac_anomaly_2026",
-        "ddac_coherence_2026",
+        T_PAGU,
+        T_KMPNEN,
+        T_ANOMALY,
+        T_COH,
     ]
 
     print("\n--- ROW COUNTS ---")
@@ -84,15 +89,15 @@ def main():
             print(f"  {row[0]:<12} {row[1]}")
 
     print("\n--- ANOMALY by anomaly_type ---")
-    if table_exists(cur, "ddac_anomaly_2026"):
-        for row in grouped(cur, "SELECT anomaly_type, COUNT(*) FROM ddac_anomaly_2026 GROUP BY anomaly_type ORDER BY 2 DESC"):
+    if table_exists(cur, T_ANOMALY):
+        for row in grouped(cur, f"SELECT anomaly_type, COUNT(*) FROM {T_ANOMALY} GROUP BY anomaly_type ORDER BY 2 DESC"):
             print(f"  {row[0]:<18} {row[1]}")
-        reasoned = scalar(cur, "SELECT COUNT(*) FROM ddac_anomaly_2026 WHERE llm_reasoning IS NOT NULL")
+        reasoned = scalar(cur, f"SELECT COUNT(*) FROM {T_ANOMALY} WHERE llm_reasoning IS NOT NULL")
         print(f"  with llm_reasoning: {reasoned}")
 
     print("\n--- COHERENCE by jenis_anomaly ---")
-    if table_exists(cur, "ddac_coherence_2026"):
-        for row in grouped(cur, "SELECT jenis_anomaly, COUNT(*) FROM ddac_coherence_2026 GROUP BY jenis_anomaly ORDER BY 2 DESC"):
+    if table_exists(cur, T_COH):
+        for row in grouped(cur, f"SELECT jenis_anomaly, COUNT(*) FROM {T_COH} GROUP BY jenis_anomaly ORDER BY 2 DESC"):
             print(f"  {row[0]:<18} {row[1]}")
 
     print("\n--- KL ASSIGNMENTS ---")

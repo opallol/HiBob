@@ -18,6 +18,22 @@ const MODELS = [
   { name: "TreasurAI oss120b", scope: "Reasoning internal", note: "Verdict anomali di jaringan Kemenkeu", color: "#b07cf0" },
 ];
 
+// penjelasan ringkas & non-teknis per fase (key = phase.id)
+const PHASE_DESC: Record<string, string> = {
+  ingest:
+    "Semua dokumen perencanaan nasional — RPJMN dan RKP — dibaca dari file PDF. Karena hasil pindai sering berantakan, teksnya dirapikan otomatis lebih dulu agar bisa diolah mesin. Tahap ini hanya menyentuh dokumen publik, belum menyentuh data anggaran.",
+  kg:
+    "Dari dokumen tadi sistem menyusun semacam 'peta arah pembangunan': dari Prioritas Nasional, turun ke Program Prioritas, lalu ke Kegiatan Prioritas. Peta inilah acuan untuk menilai apakah belanja sebuah kementerian benar-benar nyambung ke arah pembangunan negara.",
+  embed:
+    "Supaya bisa membandingkan makna kalimat — bukan sekadar mencocokkan kata yang sama — tiap baris anggaran dan tiap butir prioritas diubah jadi 'sidik jari angka'. Demi kerahasiaan, sidik jari data DIPA dihitung di komputer lokal dan tidak pernah disimpan atau dikirim keluar.",
+  align:
+    "Tiap belanja dipasangkan dengan butir prioritas yang paling dekat maknanya. Yang kemiripannya rendah ditandai: 'yatim kebijakan' bila tak punya induk prioritas sama sekali, atau 'lemah' bila nyambung tapi tipis. Inilah anomali keselarasan terhadap rencana nasional.",
+  coherence:
+    "Selain dibandingkan ke atas (ke prioritas nasional), tiap belanja juga diperiksa ke dalam: apakah program–kegiatan–output-nya saling konsisten, dan apakah jenis belanjanya wajar dibanding kementerian lain dengan output sejenis. Contoh janggal: output yang mestinya berupa layanan tapi 100% belanja modal.",
+  reasoning:
+    "Anomali tidak dibiarkan jadi sekadar angka. Model AI internal Kemenkeu membaca konteks tugas dan mandat tiap kementerian, lalu memberi penjelasan naratif sekaligus vonis: benar anomali, perlu ditinjau, atau sebenarnya wajar. Seluruh proses ini berjalan di dalam jaringan Kemenkeu.",
+};
+
 export default function PipelineSection() {
   const [pipe, setPipe] = useState<Pipeline | null>(null);
   useEffect(() => {
@@ -85,9 +101,12 @@ export default function PipelineSection() {
                   </h3>
                   <span className="text-[12px] tabular-nums text-emerald-400/90">{ph.metric}</span>
                 </div>
-                <ul className="mt-1.5 space-y-0.5">
+                {PHASE_DESC[ph.id] && (
+                  <p className="mt-2 text-[13px] leading-relaxed text-slate-400">{PHASE_DESC[ph.id]}</p>
+                )}
+                <ul className="mt-3 space-y-0.5 border-t border-ink-800/70 pt-2.5">
                   {ph.steps.map((s) => (
-                    <li key={s} className="text-[12px] text-slate-400">
+                    <li key={s} className="text-[12px] text-slate-500">
                       <span className="text-ink-600 mr-1.5">›</span>
                       {s}
                     </li>

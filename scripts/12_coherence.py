@@ -1,11 +1,16 @@
 """
 Internal Coherence Detection Pipeline
 Deteksi anomali struktur internal DIPA: hierarki + jenis komponen + komposisi akun
-Output: ddac_coherence_2026
+Output: ddac_coherence_<year> (lihat BUDGET_YEAR di common/config.py)
 """
 import time
 
 from common.db import get_connection
+from common.config import TABLE_PAGU_AKUN, TABLE_COHERENCE, TABLE_KMPNEN
+
+T_PAGU     = TABLE_PAGU_AKUN
+T_COH      = TABLE_COHERENCE
+T_KMPNEN   = TABLE_KMPNEN
 
 
 def main():
@@ -14,12 +19,12 @@ def main():
     t0 = time.time()
     
     # ============================================================
-    # STEP 1: Create ddac_coherence_2026 (dari pagu + join kmpnen)
+    # STEP 1: Create coherence table (dari pagu + join kmpnen)
     # ============================================================
     print("=== STEP 1: Creating table ===")
-    cur.execute("DROP TABLE IF EXISTS ddac_coherence_2026")
-    cur.execute("""
-        CREATE TABLE ddac_coherence_2026 (
+    cur.execute(f"DROP TABLE IF EXISTS {T_COH}")
+    cur.execute(f"""
+        CREATE TABLE {T_COH} (
             id INT AUTO_INCREMENT PRIMARY KEY,
             pagu_id INT NOT NULL,
             kementerian_kode CHAR(3) DEFAULT '',
@@ -52,7 +57,7 @@ def main():
     print("[%.0fs] Table created" % (time.time()-t0))
 
     # Build a small, indexed jenis_komponen lookup map first.
-    # The full index on t_kmpnen_2026 is (kddept, kdunit, kdprogram, ...), but the
+    # The full index on {T_KMPNEN} is (kddept, kdunit, kdprogram, ...), but the
     # pagu table has no kdunit, so a direct join breaks the index prefix and is
     # catastrophically slow over 1.5M rows. Pre-aggregating to a tiny PK-indexed
     # map keyed on the columns we actually join makes the lookup fast and correct.
@@ -69,13 +74,13 @@ def main():
             PRIMARY KEY (kddept, kdprogram, kdgiat, kdoutput, kdkmpnen)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """)
-    cur.execute("""
+    cur.execute(f"""
         INSERT INTO tmp_kmpnen_map
         SELECT kddept, kdprogram, kdgiat, kdoutput, kdkmpnen,
                MAX(CASE WHEN TRIM(jenis_komponen) = 'Utama' THEN 'Utama'
                         WHEN TRIM(jenis_komponen) = 'Pendukung' THEN 'Pendukung'
                    END)
-        FROM t_kmpnen_2026
+        FROM {T_KMPNEN}
         WHERE TRIM(jenis_komponen) IN ('Utama', 'Pendukung')
         GROUP BY kddept, kdprogram, kdgiat, kdoutput, kdkmpnen
     """)
@@ -83,10 +88,10 @@ def main():
     cur.execute("SELECT COUNT(*) FROM tmp_kmpnen_map")
     print("[%.0fs] Map has %s rows" % (time.time()-t0, format(cur.fetchone()[0], ',')))
 
-    # Populate ddac_coherence_2026 from pagu, joining the small indexed map
-    print("[%.0fs] Populating from ddac_pagu_akun_2026 + map..." % (time.time()-t0))
-    cur.execute("""
-        INSERT INTO ddac_coherence_2026 (
+    # Populate {T_COH} from pagu, joining the small indexed map
+    print(f"[%.0fs] Populating from {T_PAGU} + map..." % (time.time()-t0))
+    cur.execute(f"""
+        INSERT INTO {T_COH} (
             pagu_id, kementerian_kode, kementerian_uraian,
             program_kode, program_uraian,
             kegiatan_kode, kegiatan_uraian,
@@ -102,7 +107,7 @@ def main():
             p.komponen_kode, p.komponen_uraian,
             COALESCE(m.jenis_komponen, 'none'),
             p.total_pagu
-        FROM ddac_pagu_akun_2026 p
+        FROM {T_PAGU} p
         LEFT JOIN tmp_kmpnen_map m 
             ON p.kementerian_kode = m.kddept 
             AND p.program_kode = m.kdprogram 
@@ -115,7 +120,7 @@ def main():
     cur.execute("DROP TABLE IF EXISTS tmp_kmpnen_map")
     conn.commit()
     
-    cur.execute("SELECT COUNT(*) FROM ddac_coherence_2026")
+    cur.execute(f"SELECT COUNT(*) FROM {T_COH}")
     n = cur.fetchone()[0]
     print("[%.0fs] %s rows inserted" % (time.time()-t0, format(n, ',')))
     
@@ -127,18 +132,18 @@ def main():
     print("\n=== STEP 2: Jenis Komponen Anomaly ===")
     
     # Count jenis_komponen
-    cur.execute("SELECT jenis_komponen, COUNT(*) FROM ddac_coherence_2026 GROUP BY jenis_komponen")
+    cur.execute(f"SELECT jenis_komponen, COUNT(*) FROM {T_COH} GROUP BY jenis_komponen")
     for row in cur.fetchall():
         print("  %-15s: %s" % (row[0] or '(blank)', format(row[1], ',')))
 
     # Index dipakai oleh UPDATE klasifikasi (join per KL/program/output/jenis).
-    cur.execute("""ALTER TABLE ddac_coherence_2026
+    cur.execute(f"""ALTER TABLE {T_COH}
         ADD INDEX idx_grp (kementerian_kode, program_kode, outputkro_kode, jenis_komponen)""")
     conn.commit()
 
     # 'none' = jenis_komponen tidak terdefinisi di sumber -> tak bisa dianalisis.
-    cur.execute("""
-        UPDATE ddac_coherence_2026 
+    cur.execute(f"""
+        UPDATE {T_COH}
         SET jenis_anomaly = 'unclassified',
             jenis_anomaly_score = 20,
             coherence_score = 20
@@ -150,7 +155,7 @@ def main():
     # Total pagu per (KL, program, output) untuk komponen Utama+Pendukung.
     # Tabel kecil ber-PK supaya join klasifikasi cepat.
     cur.execute("DROP TABLE IF EXISTS tmp_out_total")
-    cur.execute("""
+    cur.execute(f"""
         CREATE TABLE tmp_out_total (
             kementerian_kode CHAR(3), program_kode CHAR(2), outputkro_kode CHAR(3),
             total_pagu DECIMAL(65,2),
@@ -158,14 +163,14 @@ def main():
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         SELECT kementerian_kode, program_kode, outputkro_kode,
                SUM(total_pagu) AS total_pagu
-        FROM ddac_coherence_2026
+        FROM {T_COH}
         WHERE jenis_komponen IN ('Utama', 'Pendukung')
         GROUP BY kementerian_kode, program_kode, outputkro_kode
     """)
 
     # Label per (KL, program, output, jenis) berdasar share pagu.
     cur.execute("DROP TABLE IF EXISTS tmp_flag")
-    cur.execute("""
+    cur.execute(f"""
         CREATE TABLE tmp_flag (
             kementerian_kode CHAR(3), program_kode CHAR(2), outputkro_kode CHAR(3),
             jenis_komponen VARCHAR(20), label VARCHAR(50), score DECIMAL(5,2),
@@ -185,7 +190,7 @@ def main():
         FROM (
             SELECT kementerian_kode, program_kode, outputkro_kode, jenis_komponen,
                    SUM(total_pagu) AS jenis_pagu
-            FROM ddac_coherence_2026
+            FROM {T_COH}
             WHERE jenis_komponen IN ('Utama', 'Pendukung')
             GROUP BY kementerian_kode, program_kode, outputkro_kode, jenis_komponen
         ) s
@@ -199,8 +204,8 @@ def main():
 
     # Satu UPDATE ber-index melabeli SEMUA baris Utama/Pendukung sekaligus
     # (normal / pendukung_dominan / utama_kecil). Tidak ada sisa blank.
-    cur.execute("""
-        UPDATE ddac_coherence_2026 c
+    cur.execute(f"""
+        UPDATE {T_COH} c
         JOIN tmp_flag f
           ON c.kementerian_kode = f.kementerian_kode
          AND c.program_kode = f.program_kode
@@ -223,15 +228,15 @@ def main():
     print("RESULTS: JENIS KOMPONEN ANOMALY")
     print("=" * 60)
     
-    cur.execute("""
-        SELECT jenis_anomaly, COUNT(*) as cnt, 
+    cur.execute(f"""
+        SELECT jenis_anomaly, COUNT(*) as cnt,
                CAST(SUM(total_pagu) AS DOUBLE) as tp
-        FROM ddac_coherence_2026 
-        GROUP BY jenis_anomaly ORDER BY 
-            CASE jenis_anomaly 
-                WHEN 'pendukung_dominan' THEN 1 
-                WHEN 'utama_kecil' THEN 2 
-                WHEN 'unclassified' THEN 3 
+        FROM {T_COH}
+        GROUP BY jenis_anomaly ORDER BY
+            CASE jenis_anomaly
+                WHEN 'pendukung_dominan' THEN 1
+                WHEN 'utama_kecil' THEN 2
+                WHEN 'unclassified' THEN 3
                 ELSE 4 END
     """)
     for row in cur.fetchall():
@@ -239,12 +244,12 @@ def main():
     
     # Top pendukung_dominan
     print("\n=== TOP 10: PENDUDUKUNG DOMINAN ===")
-    cur.execute("""
+    cur.execute(f"""
         SELECT kementerian_kode, LEFT(kementerian_uraian,25),
                program_kode, LEFT(program_uraian,30),
                outputkro_kode, LEFT(outputkro_uraian,25),
                LEFT(komponen_uraian,40), total_pagu
-        FROM ddac_coherence_2026
+        FROM {T_COH}
         WHERE jenis_anomaly = 'pendukung_dominan'
         ORDER BY total_pagu DESC LIMIT 10
     """)
@@ -255,12 +260,12 @@ def main():
     
     # Top utama_kecil
     print("\n=== TOP 10: UTAMA KECIL ===")
-    cur.execute("""
+    cur.execute(f"""
         SELECT kementerian_kode, LEFT(kementerian_uraian,25),
                program_kode, LEFT(program_uraian,30),
                outputkro_kode, LEFT(outputkro_uraian,25),
                LEFT(komponen_uraian,40), total_pagu
-        FROM ddac_coherence_2026
+        FROM {T_COH}
         WHERE jenis_anomaly = 'utama_kecil'
         ORDER BY total_pagu DESC LIMIT 10
     """)
@@ -270,7 +275,7 @@ def main():
         print("    Komp: %s | Rp %.0f M" % (row[6][:35], float(row[7])/1e6))
     
     print("\n[%.0fs] Pipeline complete!" % (time.time()-t0))
-    print("Table: ddac_coherence_2026")
+    print(f"Table: {T_COH}")
     conn.close()
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ Matriks Lampiran III RPJMN/RKP memasangkan tiap kode KP/PP (mis. 01.03.01) denga
 K/L pelaksana yang ditulis "<kddept> - <nama>" (mis. "129 - Kementerian Koordinator
 Bidang Politik dan Keamanan"). Teks tabel hasil OCR berantakan, sehingga DeepSeek
 dipakai untuk mengurai tiap chunk menjadi tuple terstruktur (code, kl_kode, kl_nama).
-Kode lalu di-link ke node KP/PP dan K/L dinormalisasi terhadap ddac_pagu_akun_2026.
+Kode lalu di-link ke node KP/PP dan K/L dinormalisasi terhadap ddac_pagu_akun_<year>.
 
 Pemakaian:
   python 08_extract_kl.py --limit 3            # uji kecil (3 chunk)
@@ -19,8 +19,10 @@ import time
 
 from openai import OpenAI
 
-from common.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
+from common.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, TABLE_PAGU_AKUN
 from common.db import get_connection
+
+T_PAGU = TABLE_PAGU_AKUN
 
 SYSTEM_PROMPT = (
     "Anda mengekstrak data terstruktur dari matriks perencanaan pembangunan "
@@ -102,7 +104,7 @@ def main():
     cur = conn.cursor()
 
     # --- Referensi K/L: kddept(3 digit) -> nama ---
-    cur.execute("SELECT DISTINCT kementerian_kode, kementerian_uraian FROM ddac_pagu_akun_2026")
+    cur.execute(f"SELECT DISTINCT kementerian_kode, kementerian_uraian FROM {T_PAGU}")
     kl_ref = {}
     for kode, nama in cur.fetchall():
         if kode:

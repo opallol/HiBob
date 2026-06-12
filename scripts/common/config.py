@@ -56,3 +56,14 @@ TREASURAI_MODELS = {
 # istilah birokrasi Indonesia. Prefix "query: " wajib saat inference.
 EMBEDDING_MODEL = "LazarusNLP/all-indo-e5-small"
 EMBEDDING_DIMS = 384
+
+# --- Budget Year (parameterized table names) ---
+# Set BUDGET_YEAR=2027 di .env untuk tahun anggaran baru tanpa mengubah script.
+BUDGET_YEAR = os.environ.get("BUDGET_YEAR", "2026")
+
+TABLE_PAGU_AKUN      = f"ddac_pagu_akun_{BUDGET_YEAR}"
+TABLE_ANOMALY        = f"ddac_anomaly_{BUDGET_YEAR}"
+TABLE_COHERENCE      = f"ddac_coherence_{BUDGET_YEAR}"
+TABLE_COHERENCE_AKUN = f"ddac_coherence_akun_{BUDGET_YEAR}"
+TABLE_KMPNEN         = f"t_kmpnen_{BUDGET_YEAR}"
+TABLE_RINGKASAN      = f"ringkasan_pagu_{BUDGET_YEAR}"

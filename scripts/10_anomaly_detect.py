@@ -25,6 +25,10 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from common.db import get_connection
+from common.config import TABLE_PAGU_AKUN, TABLE_ANOMALY
+
+T_PAGU   = TABLE_PAGU_AKUN   # ddac_pagu_akun_<year>
+T_ANOMALY = TABLE_ANOMALY    # ddac_anomaly_<year>
 
 # --------------------------------------------------------------------------
 # Config
@@ -61,11 +65,11 @@ ROUTINE_PROGRAM_PATTERN = "dukungan manajemen"
 
 def _ensure_verdict_column(cur):
     cur.execute(
-        """SELECT COUNT(*) FROM information_schema.columns
-           WHERE table_schema=DATABASE() AND table_name='ddac_anomaly_2026'
+        f"""SELECT COUNT(*) FROM information_schema.columns
+           WHERE table_schema=DATABASE() AND table_name='{T_ANOMALY}'
              AND column_name='treasurai_verdict'""")
     if cur.fetchone()[0] == 0:
-        cur.execute("ALTER TABLE ddac_anomaly_2026 "
+        cur.execute(f"ALTER TABLE {T_ANOMALY} "
                     "ADD COLUMN treasurai_verdict VARCHAR(20) NULL AFTER llm_model")
 
 
@@ -103,10 +107,10 @@ def main():
     # STEP 2: Unique alignment texts + embed
     # ------------------------------------------------------------------
     print("\n=== STEP 2: Embedding unique pagu texts ===")
-    cur.execute("""
+    cur.execute(f"""
         SELECT alignment_text, COUNT(*) AS cnt,
                SUM(total_pagu) AS total_pagu, MIN(id) AS sample_id
-        FROM ddac_pagu_akun_2026
+        FROM {T_PAGU}
         WHERE alignment_text != '' AND alignment_text IS NOT NULL
         GROUP BY alignment_text
     """)
@@ -130,10 +134,10 @@ def main():
     sample_ids = [ti["sample_id"] for ti in text_info]
     ph = ",".join(["%s"] * len(sample_ids))
     cur.execute(
-        "SELECT id, kementerian_kode, kementerian_uraian, "
+        f"SELECT id, kementerian_kode, kementerian_uraian, "
         "program_kode, kegiatan_kode, total_pagu, "
         "outputkro_kode, program_uraian "
-        "FROM ddac_pagu_akun_2026 WHERE id IN (%s)" % ph,
+        f"FROM {T_PAGU} WHERE id IN ({ph})",
         sample_ids)
     kl_lookup = {r[0]: r for r in cur.fetchall()}
     print("[%.0fs] K/L lookup pre-fetched (%d rows)" % (time.time() - t0, len(kl_lookup)))
@@ -167,15 +171,15 @@ def main():
     _ensure_verdict_column(cur)
     conn.commit()
     cur.execute(
-        """SELECT p.alignment_text, a.llm_reasoning, a.llm_model,
+        f"""SELECT p.alignment_text, a.llm_reasoning, a.llm_model,
                   a.treasurai_verdict, a.review_status
-           FROM ddac_anomaly_2026 a
-           JOIN ddac_pagu_akun_2026 p ON a.pagu_id = p.id
+           FROM {T_ANOMALY} a
+           JOIN {T_PAGU} p ON a.pagu_id = p.id
            WHERE a.llm_reasoning IS NOT NULL""")
     preserved = cur.fetchall()
     print("Preserving %d existing reasonings" % len(preserved))
 
-    cur.execute("DELETE FROM ddac_anomaly_2026")
+    cur.execute(f"DELETE FROM {T_ANOMALY}")
 
     batch        = []
     total_ins    = 0
@@ -255,8 +259,8 @@ def main():
         ))
 
         if len(batch) >= batch_size:
-            cur.executemany("""
-                INSERT INTO ddac_anomaly_2026
+            cur.executemany(f"""
+                INSERT INTO {T_ANOMALY}
                 (pagu_id, kementerian_kode, kementerian_uraian, program_kode,
                  kegiatan_kode, total_pagu,
                  alignment_score, alignment_strength, rpjmn_alignment, rkp_alignment,
@@ -274,8 +278,8 @@ def main():
                   % (i + 1, len(text_info), (i + 1) / len(text_info) * 100, time.time() - t0))
 
     if batch:
-        cur.executemany("""
-            INSERT INTO ddac_anomaly_2026
+        cur.executemany(f"""
+            INSERT INTO {T_ANOMALY}
             (pagu_id, kementerian_kode, kementerian_uraian, program_kode,
              kegiatan_kode, total_pagu,
              alignment_score, alignment_strength, rpjmn_alignment, rkp_alignment,
@@ -289,8 +293,8 @@ def main():
 
     if preserved:
         cur.executemany(
-            """UPDATE ddac_anomaly_2026 a
-               JOIN ddac_pagu_akun_2026 p ON a.pagu_id = p.id
+            f"""UPDATE {T_ANOMALY} a
+               JOIN {T_PAGU} p ON a.pagu_id = p.id
                SET a.llm_reasoning=%s, a.llm_model=%s,
                    a.treasurai_verdict=%s, a.review_status=%s
                WHERE p.alignment_text=%s""",
@@ -310,10 +314,10 @@ def main():
     print("Time    : %.0f seconds" % elapsed)
     print("Rows    : %d unique texts -> %d anomaly records" % (len(text_info), total_ins))
 
-    cur.execute("""
+    cur.execute(f"""
         SELECT anomaly_type, COUNT(*) AS cnt,
                CAST(SUM(total_pagu) AS DOUBLE) AS tp
-        FROM ddac_anomaly_2026
+        FROM {T_ANOMALY}
         GROUP BY anomaly_type ORDER BY cnt DESC
     """)
     print("\nAnomaly Distribution:")
@@ -321,10 +325,10 @@ def main():
         print("  %-25s: %6d rows | Rp %.1f T"
               % (row[0], row[1], (float(row[2]) / 1e12 if row[2] else 0)))
 
-    cur.execute("""
+    cur.execute(f"""
         SELECT alignment_strength, COUNT(*) AS cnt,
                CAST(SUM(total_pagu) AS DOUBLE) AS tp
-        FROM ddac_anomaly_2026
+        FROM {T_ANOMALY}
         GROUP BY alignment_strength
         ORDER BY FIELD(alignment_strength,'strong','moderate','weak','none')
     """)
@@ -334,14 +338,14 @@ def main():
               % (row[0], row[1], (float(row[2]) / 1e12 if row[2] else 0)))
 
     print("\n=== TOP 10 ANOMALIES (by review_priority) ===")
-    cur.execute("""
+    cur.execute(f"""
         SELECT kementerian_kode, LEFT(kementerian_uraian, 30),
                alignment_score, alignment_strength, anomaly_type,
                review_priority,
                LEFT(best_match_name, 60),
-               LEFT((SELECT alignment_text FROM ddac_pagu_akun_2026
+               LEFT((SELECT alignment_text FROM {T_PAGU}
                      WHERE id = pagu_id), 70)
-        FROM ddac_anomaly_2026
+        FROM {T_ANOMALY}
         WHERE anomaly_type IN ('policy_orphan', 'weak_alignment')
         ORDER BY review_priority DESC
         LIMIT 10

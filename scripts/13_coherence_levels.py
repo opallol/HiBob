@@ -2,7 +2,7 @@
 """
 13_coherence_levels.py
 ----------------------
-Populates the 3-level coherence detection model onto ddac_coherence_2026
+Populates the 3-level coherence detection model onto {T_COH}
 (built by 12_coherence.py). Runs IN PLACE -- does not rebuild the 1.5M-row table.
 
   Level 1  Program <-> Kegiatan   : e5-small cosine similarity -> prog_keg_coherence
@@ -38,7 +38,11 @@ import numpy as np
 
 sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else __file__.rsplit("/", 1)[0])
 from common.db import get_connection            # noqa: E402
-from common.config import EMBEDDING_MODEL       # noqa: E402
+from common.config import EMBEDDING_MODEL, TABLE_PAGU_AKUN, TABLE_COHERENCE, TABLE_COHERENCE_AKUN  # noqa: E402
+
+T_PAGU     = TABLE_PAGU_AKUN
+T_COH      = TABLE_COHERENCE
+T_COH_AKUN = TABLE_COHERENCE_AKUN
 
 # ---- defaults (override via CLI) ----------------------------------------
 PCT_LOW = 5             # percentile below which a similarity is "weak"
@@ -158,8 +162,8 @@ def main():
     texts = set()
     for col in ("program_uraian", "kegiatan_uraian", "outputkro_uraian"):
         cur.execute(
-            "SELECT DISTINCT %s FROM ddac_coherence_2026 "
-            "WHERE %s IS NOT NULL AND %s <> ''" % (col, col, col)
+            (f"SELECT DISTINCT %s FROM {T_COH} "
+             "WHERE %s IS NOT NULL AND %s <> ''") % (col, col, col)
         )
         for (t,) in cur.fetchall():
             texts.add(t)
@@ -180,8 +184,8 @@ def main():
     # =====================================================================
     print("\n[%.0fs] LEVEL 1: program<->kegiatan" % (time.time() - t0))
     cur.execute(
-        "SELECT DISTINCT kementerian_kode, program_kode, kegiatan_kode, "
-        "program_uraian, kegiatan_uraian FROM ddac_coherence_2026"
+        f"SELECT DISTINCT kementerian_kode, program_kode, kegiatan_kode, "
+        f"program_uraian, kegiatan_uraian FROM {T_COH}"
     )
     pk = {}  # (kl,prog,keg) -> sim
     generic_prog_combos = set()
@@ -208,8 +212,8 @@ def main():
     # =====================================================================
     print("\n[%.0fs] LEVEL 2: kegiatan<->output" % (time.time() - t0))
     cur.execute(
-        "SELECT DISTINCT kementerian_kode, program_kode, kegiatan_kode, outputkro_kode, "
-        "kegiatan_uraian, outputkro_uraian FROM ddac_coherence_2026"
+        f"SELECT DISTINCT kementerian_kode, program_kode, kegiatan_kode, outputkro_kode, "
+        f"kegiatan_uraian, outputkro_uraian FROM {T_COH}"
     )
     ko = {}  # (kl,prog,keg,out) -> sim
     generic_out_combos = set()
@@ -247,23 +251,23 @@ def main():
 
     # Peer profile: global category totals across ALL K/L (raw pagu, not shares).
     cur.execute(
-        "SELECT outputkro_kode, LEFT(akun_kode,2) cat, CAST(SUM(total_pagu) AS DOUBLE) "
-        "FROM ddac_pagu_akun_2026 WHERE total_pagu > 0 GROUP BY outputkro_kode, LEFT(akun_kode,2)"
+        f"SELECT outputkro_kode, LEFT(akun_kode,2) cat, CAST(SUM(total_pagu) AS DOUBLE) "
+        f"FROM {T_PAGU} WHERE total_pagu > 0 GROUP BY outputkro_kode, LEFT(akun_kode,2)"
     )
     peer_cat = {}    # out -> {cat: pagu}
     for out, cat, pagu in cur.fetchall():
         peer_cat.setdefault(out, {})[cat] = pagu
     cur.execute(
-        "SELECT outputkro_kode, COUNT(DISTINCT kementerian_kode) "
-        "FROM ddac_pagu_akun_2026 WHERE total_pagu > 0 GROUP BY outputkro_kode"
+        f"SELECT outputkro_kode, COUNT(DISTINCT kementerian_kode) "
+        f"FROM {T_PAGU} WHERE total_pagu > 0 GROUP BY outputkro_kode"
     )
     peer_count = {out: n for out, n in cur.fetchall()}
 
     # Fix 3A: Per-KL contribution to each output's totals (for self-exclusion).
     cur.execute(
-        "SELECT outputkro_kode, kementerian_kode, LEFT(akun_kode,2) cat, "
+        f"SELECT outputkro_kode, kementerian_kode, LEFT(akun_kode,2) cat, "
         "CAST(SUM(total_pagu) AS DOUBLE) "
-        "FROM ddac_pagu_akun_2026 WHERE total_pagu > 0 "
+        f"FROM {T_PAGU} WHERE total_pagu > 0 "
         "GROUP BY outputkro_kode, kementerian_kode, LEFT(akun_kode,2)"
     )
     kl_contrib = {}  # (out, kl) -> {cat: pagu}
@@ -273,9 +277,9 @@ def main():
 
     # Own profile per (kl,prog,keg,out)
     cur.execute(
-        "SELECT kementerian_kode, program_kode, kegiatan_kode, outputkro_kode, "
+        f"SELECT kementerian_kode, program_kode, kegiatan_kode, outputkro_kode, "
         "LEFT(akun_kode,2) cat, CAST(SUM(total_pagu) AS DOUBLE) "
-        "FROM ddac_pagu_akun_2026 WHERE total_pagu > 0 "
+        f"FROM {T_PAGU} WHERE total_pagu > 0 "
         "GROUP BY kementerian_kode, program_kode, kegiatan_kode, outputkro_kode, LEFT(akun_kode,2)"
     )
     own = {}  # combo -> {cat: pagu}
@@ -400,11 +404,11 @@ def main():
     print("[%.0fs]   tmp_combo inserted" % (time.time() - t0))
 
     # Index on coherence table for the join (kl,prog,keg,out).
-    cur.execute("SHOW INDEX FROM ddac_coherence_2026 WHERE Key_name='idx_ko'")
+    cur.execute(f"SHOW INDEX FROM {T_COH} WHERE Key_name='idx_ko'")
     if not cur.fetchall():
         print("[%.0fs] Adding idx_ko..." % (time.time() - t0))
         cur.execute(
-            "ALTER TABLE ddac_coherence_2026 "
+            f"ALTER TABLE {T_COH} "
             "ADD INDEX idx_ko (kementerian_kode, program_kode, kegiatan_kode, outputkro_kode)"
         )
         conn.commit()
@@ -414,13 +418,13 @@ def main():
     # =====================================================================
     print("[%.0fs] Applying level columns to 1.5M rows..." % (time.time() - t0))
     cur.execute(
-        "UPDATE ddac_coherence_2026 c JOIN tmp_combo t "
-        " ON c.kementerian_kode=t.kementerian_kode AND c.program_kode=t.program_kode "
-        " AND c.kegiatan_kode=t.kegiatan_kode AND c.outputkro_kode=t.outputkro_kode "
-        "SET c.prog_keg_coherence=t.l1_coh, c.keg_out_coherence=t.l2_coh, "
-        " c.out_komp_coherence=t.l3_coh, c.akun_komposisi_score=t.l3_score, "
-        " c.anomaly_flags=t.flags, "
-        " c.coherence_score=ROUND(%s*c.jenis_anomaly_score + %s*t.l1_anom + %s*t.l2_anom + %s*t.l3_anom, 2)"
+        (f"UPDATE {T_COH} c JOIN tmp_combo t "
+         " ON c.kementerian_kode=t.kementerian_kode AND c.program_kode=t.program_kode "
+         " AND c.kegiatan_kode=t.kegiatan_kode AND c.outputkro_kode=t.outputkro_kode "
+         "SET c.prog_keg_coherence=t.l1_coh, c.keg_out_coherence=t.l2_coh, "
+         " c.out_komp_coherence=t.l3_coh, c.akun_komposisi_score=t.l3_score, "
+         " c.anomaly_flags=t.flags, "
+         " c.coherence_score=ROUND(%s*c.jenis_anomaly_score + %s*t.l1_anom + %s*t.l2_anom + %s*t.l3_anom, 2)")
         % (W_JENIS, W_L1, W_L2, W_L3)
     )
     conn.commit()
@@ -431,10 +435,10 @@ def main():
     # =====================================================================
     # Level-3 detail table (rich per-output peer comparison)
     # =====================================================================
-    print("[%.0fs] Writing ddac_coherence_akun_2026 (level-3 detail)..." % (time.time() - t0))
-    cur.execute("DROP TABLE IF EXISTS ddac_coherence_akun_2026")
+    print(f"[%.0fs] Writing {T_COH_AKUN} (level-3 detail)..." % (time.time() - t0))
+    cur.execute(f"DROP TABLE IF EXISTS {T_COH_AKUN}")
     cur.execute(
-        "CREATE TABLE ddac_coherence_akun_2026 ("
+        f"CREATE TABLE {T_COH_AKUN} ("
         " kementerian_kode CHAR(3), program_kode CHAR(2), kegiatan_kode CHAR(4), outputkro_kode CHAR(3),"
         " out_komp_coherence DECIMAL(5,2), akun_komposisi_score DECIMAL(5,2), peer_count INT,"
         " akun_detail JSON,"
@@ -445,7 +449,7 @@ def main():
     conn.commit()
     for i in range(0, len(detail_rows), 5000):
         cur.executemany(
-            "INSERT INTO ddac_coherence_akun_2026 VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+            f"INSERT INTO {T_COH_AKUN} VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
             detail_rows[i:i + 5000],
         )
     conn.commit()
@@ -458,9 +462,9 @@ def main():
     print("MULTI-LEVEL COHERENCE SUMMARY")
     print("=" * 60)
     cur.execute(
-        "SELECT "
+        f"SELECT "
         " AVG(prog_keg_coherence), AVG(keg_out_coherence), AVG(out_komp_coherence), "
-        " AVG(akun_komposisi_score), AVG(coherence_score) FROM ddac_coherence_2026"
+        f" AVG(akun_komposisi_score), AVG(coherence_score) FROM {T_COH}"
     )
     a = cur.fetchone()
     print("avg L1 prog_keg   : %.2f" % (a[0] or 0))
@@ -470,13 +474,13 @@ def main():
     print("avg composite     : %.2f" % (a[4] or 0))
     for flag in ("level1_program_kegiatan_lemah", "level2_kegiatan_output_lemah", "level3_akun_tidak_lazim"):
         cur.execute(
-            "SELECT COUNT(*), CAST(SUM(total_pagu) AS DOUBLE) FROM ddac_coherence_2026 "
+            f"SELECT COUNT(*), CAST(SUM(total_pagu) AS DOUBLE) FROM {T_COH} "
             "WHERE JSON_CONTAINS(anomaly_flags, %s)", (json.dumps(flag),)
         )
         cnt, pagu = cur.fetchone()
         cur.execute(
-            "SELECT COUNT(DISTINCT kementerian_kode, program_kode, kegiatan_kode) "
-            "FROM ddac_coherence_2026 WHERE JSON_CONTAINS(anomaly_flags, %s)",
+            f"SELECT COUNT(DISTINCT kementerian_kode, program_kode, kegiatan_kode) "
+            f"FROM {T_COH} WHERE JSON_CONTAINS(anomaly_flags, %s)",
             (json.dumps(flag),)
         )
         uniq = cur.fetchone()[0] or 0
@@ -496,7 +500,7 @@ def main():
     print("  For stricter L1/L2, re-run with --pct-low 3")
     print("  For more L1/L2 coverage, re-run with --pct-low 10")
 
-    print("\n[%.0fs] Done. Tables: ddac_coherence_2026, ddac_coherence_akun_2026" % (time.time() - t0))
+    print(f"\n[%.0fs] Done. Tables: {T_COH}, {T_COH_AKUN}" % (time.time() - t0))
     conn.close()
 
 

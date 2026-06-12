@@ -20,8 +20,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-from common.config import TREASURAI_BASE_URL, TREASURAI_API_KEY, TREASURAI_MODELS
+from common.config import TREASURAI_BASE_URL, TREASURAI_API_KEY, TREASURAI_MODELS, TABLE_ANOMALY, TABLE_PAGU_AKUN
 from common.db import get_connection
+
+T_ANOMALY = TABLE_ANOMALY
+T_PAGU    = TABLE_PAGU_AKUN
 from common.verdict import parse_verdict
 from common.kl_context import get_kl_mandate_context
 
@@ -46,12 +49,12 @@ cur  = conn.cursor()
 
 # Ambil: semua policy_orphan (prioritas utama) + weak_alignment top-N by review_priority
 # Keduanya harus llm_reasoning IS NULL
-cur.execute("""
+cur.execute(f"""
     SELECT a.id, a.anomaly_type, a.kementerian_kode, a.kementerian_uraian,
            a.alignment_score, a.review_priority,
-           (SELECT p.alignment_text FROM ddac_pagu_akun_2026 p WHERE p.id = a.pagu_id) AS txt,
+           (SELECT p.alignment_text FROM {T_PAGU} p WHERE p.id = a.pagu_id) AS txt,
            a.best_match_name, a.top3_matches
-    FROM ddac_anomaly_2026 a
+    FROM {T_ANOMALY} a
     WHERE a.anomaly_type IN ('policy_orphan', 'weak_alignment')
       AND a.llm_reasoning IS NULL
     ORDER BY
@@ -132,7 +135,7 @@ for i, (aid, atype, kl, kl_name, score, prio, txt, best_kp, top3_json) in enumer
                 "manual_review":  "needs_review",
             }.get(verdict, "pending")
             cur.execute(
-                "UPDATE ddac_anomaly_2026 "
+                f"UPDATE {T_ANOMALY} "
                 "SET llm_reasoning=%s, llm_model=%s, treasurai_verdict=%s, review_status=%s "
                 "WHERE id=%s",
                 (reasoning, MODEL, verdict, review_status, aid),
@@ -148,14 +151,14 @@ for i, (aid, atype, kl, kl_name, score, prio, txt, best_kp, top3_json) in enumer
 
 # Summary
 print("=" * 60)
-print("FINAL STATUS ddac_anomaly_2026")
+print(f"FINAL STATUS {T_ANOMALY}")
 print("=" * 60)
-cur.execute("""
+cur.execute(f"""
     SELECT anomaly_type,
            COUNT(*) AS total,
            SUM(CASE WHEN llm_reasoning IS NOT NULL THEN 1 ELSE 0 END) AS has_reasoning,
            SUM(CASE WHEN llm_model = %s THEN 1 ELSE 0 END) AS oss120b_count
-    FROM ddac_anomaly_2026
+    FROM {T_ANOMALY}
     WHERE anomaly_type IN ('policy_orphan', 'weak_alignment')
     GROUP BY anomaly_type
 """, (MODEL,))

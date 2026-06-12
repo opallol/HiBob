@@ -53,7 +53,7 @@ DeepSeek Policy KMS adalah knowledge management system yang mengekstrak, members
     │  deepseek_policy_nodes.clean_node_name_ai
     │
     ▼
-[Phase 15: Dashboard] ── FastAPI + vis-network (human review)
+[Phase 16: Web Visualisasi] ── ekspor JSON statis → web/ (Vite + React, human review)
 ```
 
 ## 2. Why DeepSeek Wins
@@ -145,13 +145,14 @@ ke `clean_node_name_ai`: (1) potong sebelum penanda sasaran `NN -`; (2) pisah
 camelCase; (3) pisah kata sambung yang menempel (`Abadidan`→`Abadi dan`).
 753 KP + 43 PN mendapat `clean_node_name_ai` eksplisit. 167 PP menggunakan
 `node_name` langsung (PP names sudah bersih dari struktur RPJMN). Non-destruktif;
-dashboard memakai `COALESCE(clean_node_name_ai, node_name)` untuk semua 963 nodes.
+ekspor web memakai `COALESCE(clean_node_name_ai, node_name)` untuk semua 963 nodes.
 
-## 8. Dashboard Review (Human-in-the-loop)
+## 8. Web Visualisasi Review (Human-in-the-loop)
 
-`dashboard/app.py` (FastAPI) menyajikan API JSON di atas seluruh tabel hasil, dengan
-frontend statis (`dashboard/static/`, vis-network). Lima tab: Ringkasan, Knowledge
-Graph, Anomali Keselarasan, Anomali Koherensi (filter Level 1/2/3 + tabel peer
-komposisi akun), dan Penugasan K/L. Endpoint utama: `/api/summary`, `/api/graph`,
-`/api/anomalies`, `/api/coherence`, `/api/coherence-akun`, `/api/kl-assignments`.
-Backend memakai modul bersama `scripts/common` (config + koneksi DB).
+`scripts/16_export_web.py` mengekspor agregat hasil pipeline menjadi JSON statis ke
+`web/public/data/` (manifest, node bubble, detail per K/L, knowledge graph, pipeline).
+Frontend `web/` (Vite + React + TypeScript + Tailwind + react-force-graph-2d)
+menyajikan peta anomali interaktif gaya bubblemaps — **tanpa backend**, cukup file
+statis. Bubble dikelompokkan per cluster (pola akun / verdict / per K/L), warna =
+status verdict, ukuran = pagu; klik menampilkan reasoning oss120b + komposisi akun
++ mandat RPJMN/RKP. Build: `cd web && npm run build` → `web/dist/` siap deploy.

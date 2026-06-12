@@ -19,6 +19,12 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 from common.db import get_connection
+from common.config import TABLE_PAGU_AKUN, TABLE_ANOMALY, TABLE_COHERENCE, TABLE_COHERENCE_AKUN
+
+T_PAGU     = TABLE_PAGU_AKUN
+T_ANOMALY  = TABLE_ANOMALY
+T_COH      = TABLE_COHERENCE
+T_COH_AKUN = TABLE_COHERENCE_AKUN
 
 OUT_DIR  = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "public", "data")
 COH_DIR  = os.path.join(OUT_DIR, "coherence")
@@ -36,10 +42,10 @@ VERDICT_MAP = {
 }
 
 VERDICTS = [
-    {"key": "valid",   "label": "Anomali valid",  "color": "red"},
-    {"key": "review",  "label": "Perlu review",   "color": "amber"},
-    {"key": "fp",      "label": "False positive",  "color": "green"},
-    {"key": "unclear", "label": "Belum jelas",     "color": "slate"},
+    {"key": "valid",   "label": "Anomali valid",          "color": "red"},
+    {"key": "review",  "label": "Perlu review",           "color": "amber"},
+    {"key": "fp",      "label": "False positive",          "color": "green"},
+    {"key": "unclear", "label": "Tidak ditemukan anomali", "color": "slate"},
 ]
 
 
@@ -92,7 +98,7 @@ def build_mandat_index(cur):
 
 def export_coherence(cur, mandat_idx):
     """Node bubble + detail per output anomali L3 (akun_komposisi_score >= 40)."""
-    cur.execute("""
+    cur.execute(f"""
         SELECT
             ca.kementerian_kode, ca.program_kode, ca.kegiatan_kode, ca.outputkro_kode,
             ca.akun_komposisi_score, ca.peer_count, ca.akun_detail,
@@ -100,8 +106,8 @@ def export_coherence(cur, mandat_idx):
             MAX(c.kegiatan_uraian),   MAX(c.outputkro_uraian),
             SUM(c.total_pagu),
             MAX(c.treasurai_verdict), MAX(c.llm_model), MAX(c.llm_reasoning)
-        FROM ddac_coherence_akun_2026 ca
-        JOIN ddac_coherence_2026 c
+        FROM {T_COH_AKUN} ca
+        JOIN {T_COH} c
           ON  c.kementerian_kode = ca.kementerian_kode
           AND c.program_kode     = ca.program_kode
           AND c.kegiatan_kode    = ca.kegiatan_kode
@@ -194,10 +200,10 @@ def export_pipeline(cur):
         "chunks":      scalar("SELECT COUNT(*) FROM deepseek_policy_chunks"),
         "nodes_kb":    scalar("SELECT COUNT(*) FROM deepseek_policy_nodes"),
         "edges_kb":    scalar("SELECT COUNT(*) FROM deepseek_policy_edges"),
-        "dipa_lines":  scalar("SELECT COUNT(*) FROM ddac_pagu_akun_2026"),
-        "anomaly":     scalar("SELECT COUNT(*) FROM ddac_anomaly_2026 WHERE anomaly_type IN ('policy_orphan','weak_alignment')"),
-        "coherence":   scalar("SELECT COUNT(*) FROM ddac_coherence_akun_2026 WHERE akun_komposisi_score>=40"),
-        "reasoned":    scalar("SELECT COUNT(*) FROM ddac_coherence_2026 WHERE llm_reasoning IS NOT NULL"),
+        "dipa_lines":  scalar(f"SELECT COUNT(*) FROM {T_PAGU}"),
+        "anomaly":     scalar(f"SELECT COUNT(*) FROM {T_ANOMALY} WHERE anomaly_type IN ('policy_orphan','weak_alignment')"),
+        "coherence":   scalar(f"SELECT COUNT(*) FROM {T_COH_AKUN} WHERE akun_komposisi_score>=40"),
+        "reasoned":    scalar(f"SELECT COUNT(*) FROM {T_COH} WHERE llm_reasoning IS NOT NULL"),
     }
 
     phases = [
@@ -247,7 +253,7 @@ def main():
 
     manifest = {
         "generated": "2026-06-12",
-        "title": "DDAC 2026 · Deteksi Anomali Anggaran",
+        "title": "SENTINEL",
         "totals": {
             "anomaly_nodes": len(nodes),
             "total_pagu":    round(total_pagu, 2),

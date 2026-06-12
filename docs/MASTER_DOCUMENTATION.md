@@ -7,8 +7,8 @@
 **Database:** ddac2026 @ 172.16.2.153
 
 > **Update 2026-06-08:** Pipeline kini lengkap end-to-end — K/L mapping (08),
-> koherensi 3 level (13), pembersihan nama simpul (14), dan dashboard interaktif
-> (FastAPI + vis-network). Lihat Bagian 5.4–5.6 untuk hasil terbaru.
+> koherensi 3 level (13), pembersihan nama simpul (14). Lihat Bagian 5.4–5.6
+> untuk hasil terbaru.
 >
 > **Update 2026-06-11:** Tuning presisi menyeluruh — model anomaly diganti ke
 > LazarusNLP/all-indo-e5-small, klasifikasi routine dipindah ke kode resmi EB/DM,
@@ -87,8 +87,8 @@ secara multi-dimensi.
               └────────────┘
                      │
                      ▼
-              Review Dashboard
-              (human-in-the-loop)
+              Web Visualisasi (Peta Anomali)
+              (human-in-the-loop · Bagian 9)
 ```
 
 ---
@@ -288,9 +288,16 @@ Semua script di `D:\Project\deepseek-kms\scripts\`
 | 13 | coherence_levels.py | coherence + pagu | Level 1/2/3 + composite + peer detail (v2: pct_low=5, peer_min=5, --cli-args) | ✅ |
 | 14 | fix_node_names.py | nodes | clean_node_name_ai (753 KP + 43 PN) | ✅ |
 | 15 | coherence_reasoning.py | coherence L3 anomali | llm_reasoning — **19,235 baris** (30 output unik top pagu, oss120b + RPJMN/RKP mandate ctx) | ✅ |
+| 15b | coherence_template.py | coherence L3 anomali | llm_reasoning — **142,384 baris** (SEMUA output dengan akun_komposisi_score ≥ 40, oss120b, idempotent) | ✅ |
+| 16 | export_web.py | coherence + anomaly + KB | JSON statis ke `web/public/data/` (manifest, nodes, details per K/L, knowledge_graph, pipeline) | ✅ |
+| 17 | refresh_analysis.py | - | Orchestrator refresh: jalankan 10→11→12→13→15b→16 + web build | ✅ |
 
-> **Dashboard:** `dashboard/app.py` (FastAPI) + `dashboard/static/` (HTML/JS/CSS,
-> vis-network). Menyajikan API JSON di atas seluruh tabel di atas. Lihat Bagian 4.4.
+> **Perbedaan 15 vs 15b:** Script 15 hanya memproses top-30 output unik berdasarkan pagu
+> (19,235 baris). Script **15b adalah produksi** — memproses SEMUA output dengan
+> `akun_komposisi_score >= 40` (142,384 baris), idempotent (skip baris yang sudah ada reasoning).
+>
+> **Web Visualisasi:** `scripts/16_export_web.py` mengekspor JSON statis →
+> `web/` (Vite + React). Peta anomali interaktif tanpa backend. Lihat Bagian 9.
 
 ---
 
@@ -307,41 +314,54 @@ pip install pymysql pymupdf sentence-transformers openai numpy
 ```bash
 cd D:\Project\deepseek-kms
 
-# Phase 1: Knowledge Extraction
+# Phase 1: Knowledge Extraction (sekali pakai — KB tidak berubah kecuali RPJMN/RKP baru)
 python scripts\01_create_schema.py
 python scripts\02_extract_pages.py
 python scripts\03_chunk_and_clean.py
 python scripts\03c_batch_clean.py
 python scripts\04_extract_nodes.py
 python scripts\05_build_edges.py
-python scripts\07_generate_embeddings.py
+python scripts\08_extract_kl.py             # K/L mapping dari KL_MATRIX
+python scripts\09_master_pipeline.py
+python scripts\14_fix_node_names.py         # bersihkan nama simpul KB
 
-# Phase 2: Anomaly Detection
-python scripts\10_anomaly_detect.py
-python scripts\11_treasurai_reasoning.py    # semua orphan + weak_alignment
-python scripts\15_coherence_reasoning.py    # L3 coherence top-30 (butuh jaringan Kemenkeu)
-
-# Phase 3: Coherence (3 level) + cleanup nama
-python scripts\12_coherence.py              # Level 0: jenis komponen
-python scripts\13_coherence_levels.py       # Level 1/2/3 + composite + peer
-python scripts\14_fix_node_names.py         # bersihkan nama simpul
+# Phase 2: Analisis DIPA (jalankan setiap DIPA diperbarui — lihat Bagian 11)
+python scripts\10_anomaly_detect.py         # deteksi policy_orphan + weak_alignment
+python scripts\11_treasurai_reasoning.py    # reasoning semua orphan + weak_alignment (oss120b)
+python scripts\12_coherence.py              # rebuild tabel coherence (jenis komponen)
+python scripts\13_coherence_levels.py       # Level 1/2/3 + composite + peer comparison
+python scripts\15b_coherence_template.py   # reasoning L3 coherence SEMUA output ≥40 (oss120b)
+python scripts\16_export_web.py             # ekspor JSON statis ke web/public/data/
+cd web && npm run build                     # rebuild frontend → web/dist/
 ```
 
-> **Catatan:** Script 11 dan 15 memerlukan koneksi ke jaringan internal Kemenkeu
+> **Cara cepat refresh:** gunakan orchestrator
+> ```bash
+> python scripts\17_refresh_analysis.py
+> ```
+> Menjalankan semua step Phase 2 secara berurutan, berhenti otomatis jika ada error,
+> dan menampilkan waktu tiap step. Opsi: `--skip-reasoning`, `--from-step 12`.
+>
+> **Catatan:** Script 11 dan 15b memerlukan koneksi ke jaringan internal Kemenkeu
 > (TreasurAI endpoint). SSL self-signed ditangani otomatis (`verify=False`).
 
-## 4.3 Dashboard Interaktif
+## 4.3 Web Visualisasi (Peta Anomali)
 
 ```bash
-cd D:\Project\deepseek-kms\dashboard
-..\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8123 --reload
-# Buka http://127.0.0.1:8123
+# 1. Ekspor data JSON statis dari DB
+python scripts\16_export_web.py        # → web/public/data/
+
+# 2. Jalankan frontend (development)
+cd web && npm install && npm run dev   # http://localhost:5173
+
+# 3. Build statis untuk deploy
+npm run build                          # → web/dist/ (siap host di mana saja)
 ```
 
-5 tab: Ringkasan (KPI), Knowledge Graph (vis-network PN→PP→KP), Anomali
-Keselarasan (filter + CSV + reasoning TreasurAI), Anomali Koherensi (filter level
-1/2/3 + tabel peer komposisi akun), Penugasan K/L. Backend memakai modul bersama
-`scripts/common` (db + config).
+Peta anomali interaktif gaya bubblemaps: bubble dikelompokkan per cluster (pola
+akun / verdict / per K/L), warna = status verdict, ukuran = pagu. Klik bubble/baris
+menampilkan kartu detail (reasoning oss120b + komposisi akun + mandat RPJMN/RKP).
+**Statis, tanpa backend** — cukup file JSON hasil ekspor. Detail di Bagian 9.
 
 ---
 
@@ -457,7 +477,7 @@ menempel (`Abadidan`→`Abadi dan`).
 - **167 PP**: `clean_node_name_ai` NULL — menggunakan `node_name` langsung.
   PP names dari dokumen RPJMN umumnya sudah bersih (nama program resmi).
 
-Dashboard memakai `COALESCE(clean_node_name_ai, node_name)` untuk semua 963 nodes.
+Ekspor web & query memakai `COALESCE(clean_node_name_ai, node_name)` untuk semua 963 nodes.
 
 ## 5.6 K/L Institutional Mapping (NEW)
 
@@ -637,15 +657,20 @@ D:\Project\deepseek-kms\
 │   ├── 12_coherence.py
 │   ├── 13_coherence_levels.py    ← Level 1/2/3 + peer comparison
 │   ├── 14_fix_node_names.py
-│   ├── 15_coherence_reasoning.py ← reasoning coherence L3 (oss120b, baru)
+│   ├── 15_coherence_reasoning.py ← reasoning coherence L3 top-30 (referensi)
+│   ├── 15b_coherence_template.py ← PRODUKSI: reasoning L3 semua output ≥40 (oss120b)
+│   ├── 16_export_web.py          ← ekspor JSON statis ke web/public/data/
+│   ├── 17_refresh_analysis.py    ← orchestrator refresh (10→11→12→13→15b→16→web)
 │   └── common\
-│       ├── config.py             (EMBEDDING_MODEL, TREASURAI_*, DB creds)
+│       ├── config.py             (BUDGET_YEAR, TABLE_*, EMBEDDING_MODEL, TREASURAI_*, DB)
 │       ├── db.py
 │       ├── verdict.py
-│       └── kl_context.py         ← konteks mandat RPJMN/RKP per K/L (baru)
-├── dashboard\
-│   ├── app.py             (FastAPI API)
-│   └── static\            (index.html, app.js, style.css)
+│       └── kl_context.py         ← konteks mandat RPJMN/RKP per K/L
+├── web\                          ← Vite + React + TS + Tailwind frontend
+│   ├── public\data\              ← output 16_export_web.py (JSON statis)
+│   ├── src\                      ← komponen React (BubbleMap, AnomalyList, dll.)
+│   ├── dist\                     ← hasil npm run build (siap deploy)
+│   └── package.json
 └── output\
     ├── batch_clean_log.txt
     └── extraction_logs\
@@ -668,9 +693,9 @@ D:\Project\deepseek-kms\
 | **Anomaly Detection** | **N/A** ❌ | **1 orphan + 1,541 weak (e5-small, ABS_FLOOR=45)** ✅ |
 | **Coherence (3 level)** | **N/A** ❌ | **L1=30 · L2=200 · L3=895 combos flagged** ✅ |
 | **Name Cleaning** | **N/A** ❌ | **796 AI-cleaned + 167 PP (node_name) = 963 total** ✅ |
-| **Dashboard** | **N/A** ❌ | **FastAPI + vis-network (5 tab)** ✅ |
+| **Web Visualisasi** | **N/A** ❌ | **Peta anomali bubblemaps (Vite + React, statis)** ✅ |
 | **Hierarchy** | Flat list | Connected tree |
-| **Self-contained** | No | 14 scripts + dashboard + 6 docs |
+| **Self-contained** | No | 17 scripts + web visualisasi + 6 docs |
 
 ---
 
@@ -693,4 +718,91 @@ Build: `cd web && npm install && npm run build` → `web/dist/` siap deploy.
 
 ---
 
-*Generated by Hermes Agent (DeepSeek) — 2026-06-07 · diperbarui 2026-06-12 (web visualisasi)*
+---
+
+# 11. REFRESH RUNBOOK
+
+Panduan operasional ketika data DIPA berubah. KB (nodes/edges RPJMN/RKP) stabil —
+hanya tabel pagu-derived yang perlu di-refresh.
+
+## 11.1 Skenario A — APBN-P (revisi tengah tahun, tahun sama)
+
+Berlaku ketika: pagu DIPA berubah tetapi kode tahun tetap (mis. revisi Mei 2026).
+DBA memperbarui `ddac_pagu_akun_2026` dengan data baru.
+
+```bash
+cd D:\Project\deepseek-kms
+
+# Cara cepat — satu perintah:
+python scripts\17_refresh_analysis.py
+
+# Atau manual step-by-step:
+python scripts\10_anomaly_detect.py       # hapus + rebuild ddac_anomaly_2026
+python scripts\11_treasurai_reasoning.py  # idempotent — isi reasoning yang kosong saja
+python scripts\12_coherence.py            # DROP + CREATE ddac_coherence_2026
+python scripts\13_coherence_levels.py     # hitung ulang L1/L2/L3 + peer
+python scripts\15b_coherence_template.py # idempotent — isi reasoning yang kosong saja
+python scripts\16_export_web.py           # ekspor JSON statis ke web/public/data/
+cd web && npm run build                   # rebuild frontend
+```
+
+**Catatan penting:**
+- Script 12 menghapus seluruh `ddac_coherence_2026` — reasoning lama hilang.
+- Script 15b dan 11 idempotent: skip baris yang sudah punya `llm_reasoning`.
+  Jika ingin reasoning diulang dari nol, SET `llm_reasoning = NULL` dulu di DB.
+- Script 10 menghapus seluruh `ddac_anomaly_2026` tetapi juga preserve reasoning
+  lama (simpan ke temp table, restore setelah re-insert).
+
+## 11.2 Skenario B — Tahun Anggaran Baru (mis. APBN 2027)
+
+Berlaku ketika: DBA membuat tabel baru `ddac_pagu_akun_2027`, `t_kmpnen_2027`, dll.
+
+**Langkah 1:** Set tahun baru di `.env`:
+```bash
+# .env
+BUDGET_YEAR=2027
+```
+
+**Langkah 2:** Jalankan refresh — semua script otomatis menggunakan tabel 2027:
+```bash
+python scripts\17_refresh_analysis.py
+```
+
+Semua konstanta tabel di-generate otomatis dari `BUDGET_YEAR`:
+
+| Variabel | Nilai (BUDGET_YEAR=2027) |
+|----------|--------------------------|
+| `TABLE_PAGU_AKUN` | `ddac_pagu_akun_2027` |
+| `TABLE_ANOMALY` | `ddac_anomaly_2027` |
+| `TABLE_COHERENCE` | `ddac_coherence_2027` |
+| `TABLE_COHERENCE_AKUN` | `ddac_coherence_akun_2027` |
+| `TABLE_KMPNEN` | `t_kmpnen_2027` |
+| `TABLE_RINGKASAN` | `ringkasan_pagu_2027` |
+
+Tidak ada perubahan kode yang diperlukan.
+
+## 11.3 Verifikasi Setelah Refresh
+
+```bash
+python scripts\00_status_check.py
+```
+
+Cek yang diharapkan:
+- `ddac_anomaly_<year>` — ada baris policy_orphan + weak_alignment
+- `ddac_coherence_<year>` — row count ≈ row count pagu (1.5M+)
+- `ddac_coherence_akun_<year>` — ada ribuan baris (L3 peer detail)
+- `llm_reasoning` di coherence — ada puluhan ribu baris
+
+## 11.4 Troubleshooting
+
+| Gejala | Kemungkinan penyebab | Solusi |
+|--------|---------------------|--------|
+| Script 10 error tabel tidak ada | `ddac_pagu_akun_<year>` belum dibuat | Minta DBA buat tabel sebelum refresh |
+| Script 11/15b timeout | TreasurAI overloaded | Tunggu dan jalankan ulang dengan `--from-step 11` |
+| Web build gagal | Node modules belum di-install | `cd web && npm install` dulu |
+| `BUDGET_YEAR` tidak terbaca | `.env` belum disimpan | `set BUDGET_YEAR=2027 && python ...` (Windows) |
+| Reasoning lama ingin diulang | Butuh re-run reasoning | `UPDATE ddac_coherence_2026 SET llm_reasoning=NULL` lalu `--from-step 11` |
+
+---
+
+*Generated by Hermes Agent (DeepSeek) — 2026-06-07 · diperbarui 2026-06-12 (web visualisasi, refresh runbook, BUDGET_YEAR parameterization)*

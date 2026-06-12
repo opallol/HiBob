@@ -7,7 +7,7 @@ Target:
   L1/L2 (default OFF) — top-N by pagu, semantic similarity program/kegiatan/output lemah
 
 Model: oss120b
-Kolom ditambahkan ke ddac_coherence_2026 jika belum ada.
+Kolom ditambahkan ke ddac_coherence_<year> jika belum ada.
 
 Usage:
   python scripts/15_coherence_reasoning.py               # L3 top-30
@@ -22,8 +22,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-from common.config import TREASURAI_BASE_URL, TREASURAI_API_KEY, TREASURAI_MODELS
+from common.config import TREASURAI_BASE_URL, TREASURAI_API_KEY, TREASURAI_MODELS, TABLE_COHERENCE, TABLE_COHERENCE_AKUN
 from common.db import get_connection
+
+T_COH      = TABLE_COHERENCE
+T_COH_AKUN = TABLE_COHERENCE_AKUN
 from common.verdict import parse_verdict
 from common.kl_context import get_kl_mandate_context
 
@@ -58,7 +61,7 @@ CAT_LABELS = {
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def ensure_columns(cur, conn):
-    """Tambah kolom reasoning ke ddac_coherence_2026 bila belum ada."""
+    """Tambah kolom reasoning ke coherence table bila belum ada."""
     additions = [
         ("llm_reasoning",          "TEXT"),
         ("llm_model",              "VARCHAR(50)"),
@@ -67,14 +70,14 @@ def ensure_columns(cur, conn):
     ]
     added = []
     for col, defn in additions:
-        cur.execute("""
+        cur.execute(f"""
             SELECT COUNT(*) FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME   = 'ddac_coherence_2026'
+              AND TABLE_NAME   = '{T_COH}'
               AND COLUMN_NAME  = %s
         """, (col,))
         if cur.fetchone()[0] == 0:
-            cur.execute("ALTER TABLE ddac_coherence_2026 ADD COLUMN %s %s" % (col, defn))
+            cur.execute((f"ALTER TABLE {T_COH} ADD COLUMN %s %s") % (col, defn))
             added.append(col)
     if added:
         conn.commit()
@@ -145,9 +148,9 @@ def process_l3(conn, cur, limit):
         return
     print("\n=== L3 (Komposisi Akun vs Peer) — top %d by pagu ===" % limit)
 
-    # ddac_coherence_akun_2026 sudah deduplicated per (kl, prog, keg, out).
-    # Join ke ddac_coherence_2026 untuk uraian teks + filter llm_reasoning IS NULL.
-    cur.execute("""
+    # coherence_akun deduplicated per (kl, prog, keg, out).
+    # Join ke coherence untuk uraian teks + filter llm_reasoning IS NULL.
+    cur.execute(f"""
         SELECT
             ca.kementerian_kode,
             MAX(c.kementerian_uraian)   AS kl_name,
@@ -161,8 +164,8 @@ def process_l3(conn, cur, limit):
             ca.peer_count,
             ca.akun_detail,
             SUM(c.total_pagu)           AS total_pagu
-        FROM ddac_coherence_akun_2026 ca
-        JOIN ddac_coherence_2026 c
+        FROM {T_COH_AKUN} ca
+        JOIN {T_COH} c
           ON  c.kementerian_kode = ca.kementerian_kode
           AND c.program_kode     = ca.program_kode
           AND c.kegiatan_kode    = ca.kegiatan_kode
@@ -215,8 +218,8 @@ def process_l3(conn, cur, limit):
         if result:
             reasoning, verdict, status = result
             # Update SEMUA baris coherence_2026 untuk (kl, prog, keg, out) ini
-            cur.execute("""
-                UPDATE ddac_coherence_2026
+            cur.execute(f"""
+                UPDATE {T_COH}
                 SET llm_reasoning=%s, llm_model=%s,
                     treasurai_verdict=%s, review_status_coherence=%s
                 WHERE kementerian_kode=%s AND program_kode=%s
@@ -236,7 +239,7 @@ def process_l1l2(conn, cur, limit):
         return
     print("\n=== L1/L2 (Semantic Coherence) — top %d by pagu ===" % limit)
 
-    cur.execute("""
+    cur.execute(f"""
         SELECT
             kementerian_kode,
             MAX(kementerian_uraian)  AS kl_name,
@@ -248,7 +251,7 @@ def process_l1l2(conn, cur, limit):
             MIN(keg_out_coherence)   AS l2_score,
             anomaly_flags,
             SUM(total_pagu)          AS total_pagu
-        FROM ddac_coherence_2026
+        FROM {T_COH}
         WHERE (
             JSON_CONTAINS(anomaly_flags, JSON_QUOTE('level1_program_kegiatan_lemah'))
             OR
@@ -303,8 +306,8 @@ def process_l1l2(conn, cur, limit):
         result = call_treasurai(prompt)
         if result:
             reasoning, verdict, status = result
-            cur.execute("""
-                UPDATE ddac_coherence_2026
+            cur.execute(f"""
+                UPDATE {T_COH}
                 SET llm_reasoning=%s, llm_model=%s,
                     treasurai_verdict=%s, review_status_coherence=%s
                 WHERE kementerian_kode=%s AND program_kode=%s AND kegiatan_kode=%s
@@ -334,9 +337,9 @@ def main():
 
     # Summary
     print("\n" + "=" * 60)
-    print("FINAL STATUS ddac_coherence_2026")
+    print(f"FINAL STATUS {T_COH}")
     print("=" * 60)
-    cur.execute("""
+    cur.execute(f"""
         SELECT
             SUM(CASE WHEN JSON_CONTAINS(anomaly_flags, JSON_QUOTE('level3_akun_tidak_lazim'))   THEN 1 ELSE 0 END) AS l3_total,
             SUM(CASE WHEN JSON_CONTAINS(anomaly_flags, JSON_QUOTE('level3_akun_tidak_lazim'))
@@ -346,7 +349,7 @@ def main():
             SUM(CASE WHEN (JSON_CONTAINS(anomaly_flags, JSON_QUOTE('level1_program_kegiatan_lemah'))
                       OR  JSON_CONTAINS(anomaly_flags, JSON_QUOTE('level2_kegiatan_output_lemah')))
                       AND llm_reasoning IS NOT NULL THEN 1 ELSE 0 END)                          AS l12_done
-        FROM ddac_coherence_2026
+        FROM {T_COH}
     """)
     r = cur.fetchone()
     print("  L3 anomali : %s baris | %s punya reasoning" % (

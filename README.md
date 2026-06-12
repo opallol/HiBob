@@ -20,7 +20,8 @@
 | 12. Coherence | 12_coherence.py | ✅ DONE | jenis komponen (1.5M rows) |
 | 13. Koherensi 3 Level | 13_coherence_levels.py | ✅ DONE | Level 1/2/3 + peer comparison |
 | 14. Bersih Nama | 14_fix_node_names.py | ✅ DONE | 856/891 nama dibersihkan |
-| 15. Dashboard | dashboard/app.py | ✅ DONE | FastAPI + vis-network (5 tab) |
+| 16. Web Visualisasi | 16_export_web.py + web/ | ✅ DONE | Peta anomali bubblemaps (Vite + React, statis) |
+| 17. Refresh Orchestrator | 17_refresh_analysis.py | ✅ DONE | Jalankan ulang 10→16 saat DIPA berubah |
 
 ### Key Advantage: AI Cleaning
 
@@ -55,7 +56,7 @@ Tanpa AI cleaning: parsing gagal. Dengan AI cleaning: hierarchy tree langsung te
 | K/L Mapping | **N/A** ❌ | **585 penugasan** ✅ |
 | Anomaly Detection | **N/A** ❌ | **389 orphans + AI reasoning** ✅ |
 | Koherensi Internal | **N/A** ❌ | **3 level + peer comparison** ✅ |
-| Dashboard | **N/A** ❌ | **FastAPI + vis-network** ✅ |
+| Web Visualisasi | **N/A** ❌ | **Peta anomali bubblemaps (Vite + React, statis)** ✅ |
 
 ### Koherensi Internal 3 Level (2026-06-08)
 
@@ -75,15 +76,29 @@ tiga tingkat hierarki anggaran:
 
 `node_name` hasil ekstraksi PDF adalah blob ~250 karakter dengan kata menempel.
 `14_fix_node_names.py` membersihkannya ke `clean_node_name_ai` (856/891 simpul).
-Dashboard memakai `COALESCE(clean_node_name_ai, node_name)`.
+Ekspor web memakai `COALESCE(clean_node_name_ai, node_name)`.
 
-### Cara Menjalankan Dashboard
+### Cara Menjalankan Web Visualisasi
 
 ```bash
-cd dashboard
-..\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8123 --reload
-# Buka http://127.0.0.1:8123
+# Ekspor data JSON statis dari DB
+python scripts\16_export_web.py        # → web/public/data/
+
+# Development server
+cd web && npm install && npm run dev   # http://localhost:5173
+
+# Build statis untuk deploy
+npm run build                          # → web/dist/
 ```
+
+### Refresh saat DIPA Berubah (APBN-P / tahun baru)
+
+```bash
+# Set BUDGET_YEAR di .env bila ganti tahun (mis. BUDGET_YEAR=2027), lalu:
+python scripts\17_refresh_analysis.py  # jalankan ulang 10→11→12→13→15b→16 + build
+```
+
+Lihat Bagian 11 (Refresh Runbook) di MASTER_DOCUMENTATION untuk detail.
 
 > Dokumentasi lengkap: [docs/MASTER_DOCUMENTATION.md](docs/MASTER_DOCUMENTATION.md)
 > dan [docs/SCHEMA.md](docs/SCHEMA.md).

@@ -1,8 +1,8 @@
-# DDAC 2026 — Peta Anomali Anggaran
+# SENTINEL — Spending Intelligence for National Alignment Review
 
-Web visualisasi interaktif hasil pipeline deteksi anomali anggaran DIPA 2026.
-Gaya konstelasi (bubblemaps): bubble dikelompokkan per cluster, warna = status anomali,
-ukuran = pagu. Klik bubble → reasoning TreasurAI oss120b + komposisi akun + mandat RPJMN/RKP.
+Web visualisasi interaktif hasil analisis keselarasan belanja negara (DIPA) terhadap
+RPJMN/RKP. Gaya konstelasi (bubblemaps): bubble dikelompokkan per cluster, warna = status
+anomali, ukuran = pagu. Klik bubble → reasoning TreasurAI oss120b + komposisi akun + mandat RPJMN/RKP.
 
 Data **statis** (sudah beku) — tidak butuh backend. Cukup host folder `dist/`.
 
@@ -43,7 +43,7 @@ Data & UI terisolasi via iframe, jadi aman ditempel di situs mana pun.
 
 ```html
 <script src="https://HOST/embed.js"></script>
-<ddac-anomaly-map src="https://HOST/" height="640"></ddac-anomaly-map>
+<sentinel-map src="https://HOST/" height="640"></sentinel-map>
 ```
 
 Parameter URL: `?embed=1` (tanpa header), `?view=pipeline` (buka ke seksi alur).
