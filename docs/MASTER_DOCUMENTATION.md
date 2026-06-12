@@ -2,7 +2,7 @@
 ## Master Documentation
 
 **Author:** DeepSeek via Hermes Agent
-**Date:** 2026-06-07 (terakhir diperbarui: 2026-06-11)
+**Date:** 2026-06-07 (terakhir diperbarui: 2026-06-12)
 **Project:** D:\Project\deepseek-kms
 **Database:** ddac2026 @ 172.16.2.153
 
@@ -16,6 +16,12 @@
 > diturunkan 50→45. Coherence L1 false positive dibersihkan: Program DM + military K/L
 > di-suppress (135→30 combos). L2 EB-series output di-suppress (F3). Lihat Bagian 5.2
 > dan 5.4 untuk distribusi terkini.
+>
+> **Update 2026-06-12:** TreasurAI reasoning diperluas ke **semua** anomali. Script 11
+> kini memproses 1 orphan + 1,541 weak_alignment (total 1,542 item); script 15 (baru)
+> memproses coherence L3 top-30 output unik → 19,235 baris. Model upgrade ke oss120b.
+> Prompt di-enrich konteks mandat RPJMN/RKP per K/L via `common/kl_context.py` (baru).
+> SSL self-signed Kemenkeu ditangani `verify=False`. Lihat Bagian 2.4, 3, dan 6.1.
 
 ---
 
@@ -75,7 +81,7 @@ secara multi-dimensi.
               │            │
               ▼            │
          TreasuryAI        │
-         OSS 20B/120B      │
+         OSS 120B          │
          (reasoning)       │
               │            │
               └────────────┘
@@ -194,8 +200,10 @@ secara runtime menggunakan e5-small. Tabel ini adalah sisa dari versi bge-m3 seb
 | best_match_code | KP node code terdekat |
 | best_match_name | KP node name terdekat |
 | top3_matches | JSON top-3 KP candidates |
-| llm_reasoning | TreasuryAI analysis |
-| review_status | pending / valid / false_positive |
+| llm_reasoning | TreasurAI reasoning naratif (oss120b) — terisi untuk 1,542 item |
+| llm_model | Model yang digunakan: 'oss120b' |
+| treasurai_verdict | valid / false_positive / manual_review |
+| review_status | confirmed / dismissed / needs_review / pending |
 
 ## 2.5 ddac_coherence_2026 — Internal Coherence (1,504,455 rows)
 
@@ -212,6 +220,10 @@ Deteksi anomali struktur internal DIPA secara **3 level** (semua kolom kini teri
 | akun_komposisi_score | **Level 3** skor anomali komposisi belanja (0-100) ✅ |
 | coherence_score | Composite: 0.35·jenis + 0.20·L1 + 0.20·L2 + 0.25·L3 |
 | anomaly_flags | JSON daftar level yang terpicu (mis. `["level3_akun_tidak_lazim"]`) |
+| llm_reasoning | TreasurAI reasoning untuk L3 anomali (oss120b) — terisi 19,235 baris |
+| llm_model | 'oss120b' |
+| treasurai_verdict | valid / false_positive / manual_review |
+| review_status_coherence | confirmed / dismissed / needs_review / pending |
 
 Threshold flag: L1/L2 dipicu bila similarity < persentil-5 distribusinya
 (model e5-small, prefix "query: "). Suppression rules:
@@ -271,11 +283,11 @@ Semua script di `D:\Project\deepseek-kms\scripts\`
 | 08 | extract_kl.py | KL_MATRIX chunks | kl_assignments (585) | ✅ |
 | 09 | master_pipeline.py | all above | final nodes+edges+emb | ✅ |
 | 10 | anomaly_detect.py | pagu + KP (e5-small runtime) | ddac_anomaly_2026 (1 orphan, 1,541 weak) | ✅ |
-| 11 | treasurai_reasoning.py | anomalies | llm_reasoning (389 items) | ✅ |
-| 13b | 13_apply_verdicts.py | TreasurAI JSON | treasurai_verdict | ✅ |
+| 11 | treasurai_reasoning.py | ddac_anomaly (orphan+weak) | llm_reasoning — **1,542 item** (1 orphan + 1,541 weak, oss120b + RPJMN/RKP mandate ctx) | ✅ |
 | 12 | coherence.py | pagu + t_kmpnen | ddac_coherence_2026 (jenis komponen) | ✅ |
 | 13 | coherence_levels.py | coherence + pagu | Level 1/2/3 + composite + peer detail (v2: pct_low=5, peer_min=5, --cli-args) | ✅ |
-| 14 | fix_node_names.py | nodes | clean_node_name_ai (856 dibersihkan) | ✅ |
+| 14 | fix_node_names.py | nodes | clean_node_name_ai (753 KP + 43 PN) | ✅ |
+| 15 | coherence_reasoning.py | coherence L3 anomali | llm_reasoning — **19,235 baris** (30 output unik top pagu, oss120b + RPJMN/RKP mandate ctx) | ✅ |
 
 > **Dashboard:** `dashboard/app.py` (FastAPI) + `dashboard/static/` (HTML/JS/CSS,
 > vis-network). Menyajikan API JSON di atas seluruh tabel di atas. Lihat Bagian 4.4.
@@ -306,22 +318,19 @@ python scripts\07_generate_embeddings.py
 
 # Phase 2: Anomaly Detection
 python scripts\10_anomaly_detect.py
-python scripts\11_treasurai_reasoning.py 30
+python scripts\11_treasurai_reasoning.py    # semua orphan + weak_alignment
+python scripts\15_coherence_reasoning.py    # L3 coherence top-30 (butuh jaringan Kemenkeu)
 
 # Phase 3: Coherence (3 level) + cleanup nama
-python scripts\12_coherence.py          # Level 0: jenis komponen
-python scripts\13_coherence_levels.py   # Level 1/2/3 + composite + peer
-python scripts\14_fix_node_names.py     # bersihkan nama simpul
+python scripts\12_coherence.py              # Level 0: jenis komponen
+python scripts\13_coherence_levels.py       # Level 1/2/3 + composite + peer
+python scripts\14_fix_node_names.py         # bersihkan nama simpul
 ```
 
-## 4.3 One-Click Batch Files
+> **Catatan:** Script 11 dan 15 memerlukan koneksi ke jaringan internal Kemenkeu
+> (TreasurAI endpoint). SSL self-signed ditangani otomatis (`verify=False`).
 
-| File | Function |
-|------|----------|
-| `RUN_TREASURAI.bat` | TreasuryAI reasoning |
-| `RUN_COHERENCE.bat` | Internal coherence detection |
-
-## 4.4 Dashboard Interaktif
+## 4.3 Dashboard Interaktif
 
 ```bash
 cd D:\Project\deepseek-kms\dashboard
@@ -459,15 +468,19 @@ Script `08_extract_kl.py` memetakan KP → K/L pelaksana dari Matriks Lampiran I
 
 # 6. API CONFIGURATIONS
 
-## 6.1 TreasuryAI (Internal Kemenkeu)
+## 6.1 TreasurAI (Internal Kemenkeu)
 
 ```
 Base URL: https://treasurai-src-treasury-ai-dev.apps.ocpsdc-djpb.kemenkeu.go.id
-Models:   /api/v1/openshift/oss20b/chat (light)
-          /api/v1/openshift/oss120b/chat (heavy)
+Model:    /api/v1/openshift/oss120b/chat  (aktif — 120B parameter)
 Auth:     X-API-Key header
-Config:   treasurai_config.json
+Config:   scripts/common/config.py  (TREASURAI_BASE_URL, TREASURAI_API_KEY, TREASURAI_MODELS)
+SSL:      verify=False (server menggunakan self-signed certificate Kemenkeu)
+Timeout:  60 detik per request
 ```
+
+Digunakan oleh script 11 (policy alignment) dan script 15 (coherence L3).
+Setiap prompt di-enrich konteks mandat RPJMN/RKP per K/L via `common/kl_context.py`.
 
 ## 6.2 DeepSeek API
 
@@ -599,11 +612,10 @@ D:\Project\deepseek-kms\
 ├── README.md
 ├── konfigurasi
 ├── .env                          (DEEPSEEK_API_KEY)
-├── treasurai_config.json         (TreasuryAI credentials)
-├── RUN_TREASURAI.bat
-├── RUN_COHERENCE.bat
+├── treasurai_config.json         (TreasurAI credentials)
 ├── docs\
 │   ├── MASTER_DOCUMENTATION.md   ← this file
+│   ├── METHODOLOGY.md            ← metodologi detail (baru)
 │   ├── ARCHITECTURE.md
 │   ├── SCHEMA.md
 │   ├── COMPARISON.md
@@ -621,12 +633,16 @@ D:\Project\deepseek-kms\
 │   ├── 08_extract_kl.py
 │   ├── 09_master_pipeline.py
 │   ├── 10_anomaly_detect.py
-│   ├── 11_treasurai_reasoning.py
+│   ├── 11_treasurai_reasoning.py ← reasoning semua orphan + weak_alignment (oss120b)
 │   ├── 12_coherence.py
-│   ├── 13_apply_verdicts.py      ← strukturkan verdict TreasurAI
 │   ├── 13_coherence_levels.py    ← Level 1/2/3 + peer comparison
 │   ├── 14_fix_node_names.py
-│   └── common\            (config.py, db.py, verdict.py)
+│   ├── 15_coherence_reasoning.py ← reasoning coherence L3 (oss120b, baru)
+│   └── common\
+│       ├── config.py             (EMBEDDING_MODEL, TREASURAI_*, DB creds)
+│       ├── db.py
+│       ├── verdict.py
+│       └── kl_context.py         ← konteks mandat RPJMN/RKP per K/L (baru)
 ├── dashboard\
 │   ├── app.py             (FastAPI API)
 │   └── static\            (index.html, app.js, style.css)

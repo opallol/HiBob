@@ -1,7 +1,7 @@
 # Metodologi DeepSeek Policy KMS
 ## Sistem Analisis Keselarasan dan Koherensi Anggaran APBN 2026
 
-**Versi:** 1.0 (2026-06-11)
+**Versi:** 1.1 (2026-06-12)
 **Database:** `ddac2026` @ 172.16.2.153
 
 ---
@@ -14,7 +14,7 @@ Sebelum masuk ke fase-fase teknis, hal paling fundamental yang perlu dipahami ad
 |-------|-------|----------------|--------|
 | **DeepSeek Chat** | API Eksternal (Cloud) | Dokumen PDF publik | RPJMN/RKP adalah dokumen publik yang sudah dipublikasikan pemerintah. Aman dikirim ke API eksternal. |
 | **LazarusNLP/all-indo-e5-small** | Model Lokal (On-premise) | Data anggaran DIPA | Data DIPA per K/L bersifat internal pemerintah. Model dijalankan lokal — **tidak ada data yang meninggalkan server**. |
-| **TreasurAI OSS 120B** | API Internal Kemenkeu | Reasoning anomali orphan | Data DIPA yang sudah dianalisis dikirim ke sistem internal Kemenkeu. Tidak keluar jaringan. |
+| **TreasurAI OSS 120B** | API Internal Kemenkeu | Reasoning **semua** anomali keselarasan (1 orphan + 1,541 weak) dan anomali koherensi L3 (19,235 baris) | Data DIPA yang sudah dianalisis dikirim ke sistem internal Kemenkeu. Tidak keluar jaringan. |
 
 **Prinsip dasar:** Data yang lebih sensitif ditangani oleh infrastruktur yang lebih tertutup. Dokumen kebijakan publik → cloud. Data anggaran K/L → lokal. Analisis kualitatif anggaran → jaringan internal Kemenkeu.
 
@@ -49,11 +49,14 @@ Sebelum masuk ke fase-fase teknis, hal paling fundamental yang perlu dipahami ad
           ├─▶ LazarusNLP e5-small (lokal) → cosine similarity
           │   [ddac_anomaly_2026: status keselarasan per output DIPA]
           │         │
-          │         └─▶ TreasurAI OSS 120B (jaringan Kemenkeu)
-          │             [llm_reasoning per policy_orphan]
+          │         └─▶ TreasurAI OSS 120B + kl_context.py (jaringan Kemenkeu)
+          │             [llm_reasoning: 1 orphan + 1,541 weak = 1,542 item]
           │
           └─▶ LazarusNLP e5-small (lokal) → 3-level coherence
               [ddac_coherence_2026: 1.504.455 baris skor koherensi]
+                    │
+                    └─▶ TreasurAI OSS 120B + kl_context.py (jaringan Kemenkeu)
+                        [llm_reasoning coherence L3: 19,235 baris (30 output unik)]
 ```
 
 ---
@@ -530,47 +533,105 @@ Pertanyaan intinya adalah: "Apakah uang yang dialokasikan dalam DIPA 2026 benar-
 
 ### Detail Teknis
 
-**Script:** `11_treasurai_reasoning.py`
+**Script keselarasan:** `11_treasurai_reasoning.py`
+**Script koherensi:** `15_coherence_reasoning.py`
 **Model:** TreasurAI OSS 120B (sistem internal Kemenkeu)
 **Endpoint:** Internal network Kemenkeu — **tidak melewati internet publik**
+**SSL:** `verify=False` — server Kemenkeu menggunakan self-signed certificate
 **Alasan TreasurAI (bukan DeepSeek):** Input berisi data DIPA spesifik K/L (nama program, kegiatan, pagu, kode) yang bersifat internal pemerintah. TreasurAI adalah sistem yang beroperasi di infrastruktur Kemenkeu sendiri.
 
-**Proses:**
-1. Query: `WHERE anomaly_type = 'policy_orphan' AND llm_reasoning IS NULL`
-2. Untuk setiap orphan, bangun prompt:
+#### Enrichment Konteks Mandat (common/kl_context.py — BARU)
 
+Setiap prompt di-enrich dengan konteks mandat K/L dari knowledge graph RPJMN/RKP:
+
+```python
+# Untuk setiap K/L, ambil KP/PP yang ditugaskan ke K/L tersebut
+def get_kl_mandate_context(cur, kl_kode, max_kp=10):
+    # Query deepseek_policy_kl_assignments JOIN deepseek_policy_nodes
+    # Prioritas: RPJMN > RKP_2026 > RKP_2025 > lainnya
+    # Output format:
+    # "Mandat K/L 128 dalam RPJMN/RKP:
+    #   - KP 04.12.01 [pelaksana]: Pemberian Makan Bergizi untuk Siswa... (RPJMN)
+    #   - KP 04.12.02 [pelaksana]: Penguatan Ekosistem Pendukung... (RPJMN)"
 ```
-Item DIPA:
-K/L: {kl_kode} - {kl_name}
-Program/Kegiatan: {alignment_text[:300]}
 
-KP RKP terdekat (skor {score}/100):
-{best_kp_name}
+Coverage: 72 K/L memiliki penugasan KP — mencakup ~80% dari weak_alignment items dan ~70% dari K/L dengan L3 anomali. K/L tanpa penugasan tetap diproses tanpa konteks mandat.
+
+#### Script 11 — Policy Alignment Reasoning
+
+**Cakupan:**
+```sql
+WHERE anomaly_type IN ('policy_orphan', 'weak_alignment')
+  AND llm_reasoning IS NULL
+ORDER BY
+    CASE anomaly_type WHEN 'policy_orphan' THEN 0 ELSE 1 END,
+    review_priority DESC
+```
+Policy orphan diprioritaskan, lalu weak_alignment diurut dari `review_priority` tertinggi (anomaly_score × materiality).
+
+**Struktur prompt:**
+```
+[Weak Alignment] Item DIPA:
+K/L     : 025 - Kementerian Agama
+Prog/Keg: Program Wajib Belajar 13 Tahun | Layanan Pembiayaan Pendidikan...
+
+KP RPJMN/RKP terdekat (skor 47/100):
+KP 04.01.01: Perluasan Layanan Pendidikan Anak Usia Dini...
 
 Top-3 semantic match:
-- KP 01.01.01: Penguatan Wawasan Ideologi (skor 42)
-- KP 04.02.01: Akses Pendidikan Dasar (skor 38)
+- KP 04.01.01: Perluasan Layanan PAUD (skor 47)
+- KP 04.02.01: Peningkatan Mutu Pendidikan Dasar (skor 44)
 ...
 
-Kenapa alignment rendah? Anomali valid atau false positive?
+Mandat K/L 025 dalam RPJMN/RKP:
+  - KP 04.06.01 [pelaksana]: Peningkatan Kualitas Pendidikan Keagamaan (RPJMN)
+  ...
+
+Item ini memiliki alignment lemah (rank < P15, skor ≥ 45). Berdasarkan mandat K/L
+di atas, apakah ada penjelasan mengapa similaritynya rendah?
 ```
 
-3. System prompt menempatkan TreasurAI sebagai *"asisten analisis anggaran ahli di Ditjen Perbendaharaan"*
-4. Response: maksimal 4 kalimat, Bahasa Indonesia formal
-5. Fungsi `parse_verdict()` mengekstrak verdict terstruktur dari teks bebas: `valid` / `false_positive` / `manual_review`
-
 **Output DB:**
-- `ddac_anomaly_2026.llm_reasoning` — reasoning naratif per orphan
+- `ddac_anomaly_2026.llm_reasoning` — reasoning naratif
+- `ddac_anomaly_2026.llm_model` — `'oss120b'`
 - `ddac_anomaly_2026.treasurai_verdict` — `valid` / `false_positive` / `manual_review`
 - `ddac_anomaly_2026.review_status` — `confirmed` / `dismissed` / `needs_review` / `pending`
-- **389 item** saat ini memiliki reasoning (dari run historis yang dipreserve)
+- **1,542 item** memiliki reasoning (1 orphan + 1,541 weak_alignment, oss120b)
+
+#### Script 15 — Coherence L3 Reasoning
+
+**Cakupan:** `ddac_coherence_akun_2026` JOIN `ddac_coherence_2026` WHERE `akun_komposisi_score >= 40`, diurut by total pagu DESC.
+
+**Struktur prompt:**
+```
+Anomali Koherensi Level 3 — Komposisi Akun vs Peer:
+K/L     : 128 - Badan Gizi Nasional
+Output  : QEA - Bantuan Masyarakat (MBG)
+
+Deviasi total: 95.8% vs 12 K/L peer
+  Belanja Bansos (57): K/L ini=100% | rata-rata peer= 5%
+
+Total pagu K/L ini: Rp 0.19 T
+
+Mandat K/L 128 dalam RPJMN/RKP:
+  - KP 04.12.01 [pelaksana]: Pemberian Makan Bergizi untuk Siswa, Santri, Ibu Hamil (RPJMN)
+
+Apakah pola belanja yang sangat berbeda dari 12 K/L peer ini dapat dijelaskan
+oleh mandat RPJMN/RKP K/L tersebut?
+```
+
+Satu reasoning di-update ke **semua baris** coherence_2026 yang memiliki kombinasi (kl, prog, keg, output) yang sama — sehingga 30 output unik menghasilkan update 19,235 baris.
+
+**Output DB (kolom baru di ddac_coherence_2026):**
+- `llm_reasoning`, `llm_model`, `treasurai_verdict`, `review_status_coherence`
+- **19,235 baris** memiliki reasoning (dari 30 output unik top pagu, oss120b)
 
 **Mekanisme preserve reasoning:**
-Script 10 (anomaly detect) selalu membaca `llm_reasoning` yang sudah ada sebelum melakukan DELETE+reinsert — sehingga reasoning TreasurAI tidak hilang meski script 10 dijalankan ulang.
+Script 10 (anomaly detect) selalu menyimpan `llm_reasoning` sebelum reinsert — reasoning tidak hilang meski script 10 dijalankan ulang. Script 15 hanya memproses `llm_reasoning IS NULL`.
 
 ### Penjelasan Konseptual
 
-Deteksi anomali berbasis cosine similarity menghasilkan angka — tapi angka tidak selalu cukup untuk membuat keputusan kebijakan. Skor 38/100 untuk "Wajib Belajar 13 Tahun" bisa berarti: (a) program ini memang tidak berkaitan dengan prioritas nasional, atau (b) nomenklatur DIPA-nya berbeda dari nama KP di RPJMN tapi substansinya sama. Komputer tidak bisa membedakan keduanya — dibutuhkan pemahaman konteks kebijakan. Di sinilah TreasurAI masuk: ia adalah LLM berukuran besar (120 miliar parameter) yang di-deploy di infrastruktur Kemenkeu sendiri, sehingga data DIPA yang sensitif tidak perlu keluar jaringan. TreasurAI membaca skor similarity dan konteks program, lalu memberikan judgment kualitatif: apakah ini anomali nyata, false positive akibat perbedaan nomenklatur, atau memerlukan review manual oleh analis manusia. Hasilnya adalah sistem "human-in-the-loop" di mana AI melakukan pemindaian skala besar dan manusia hanya perlu memverifikasi temuan yang benar-benar meragukan.
+Deteksi anomali berbasis cosine similarity dan peer comparison menghasilkan angka — tapi angka tidak selalu cukup untuk membuat keputusan kebijakan. Apakah Badan Gizi Nasional yang mengalokasikan 100% anggaran ke Belanja Bansos itu anomali yang harus dipersoalkan, atau justru sesuai tugasnya karena RPJMN memang menugaskan program Makan Bergizi Gratis? Komputer tidak bisa membedakan keduanya — dibutuhkan pemahaman konteks kebijakan. Di sinilah TreasurAI masuk: ia adalah LLM berukuran besar (120 miliar parameter) yang di-deploy di infrastruktur Kemenkeu sendiri, sehingga data DIPA yang sensitif tidak perlu keluar jaringan. Yang membedakan sistem ini dari sekadar "tanya ke LLM" adalah **grounding ke knowledge graph**: setiap reasoning di-inject konteks mandat RPJMN/RKP yang relevan untuk K/L tersebut — sehingga TreasurAI tidak bergantung pada pengetahuan umum saja, melainkan pada data yang sudah terverifikasi dari dokumen kebijakan resmi. Hasilnya adalah sistem "human-in-the-loop" di mana AI melakukan pemindaian skala besar dengan konteks kebijakan yang tepat, dan manusia hanya perlu memverifikasi temuan yang benar-benar meragukan.
 
 ---
 
@@ -772,7 +833,7 @@ Bayangkan sistem ini seperti seorang auditor berpengalaman yang memeriksa lapora
 |---|-------|------|-------|-------------------|
 | 1 | **DeepSeek Chat** (cloud) | 3, 7 | OCR correction + K/L parsing | Dokumen publik (RPJMN, RKP) |
 | 2 | **LazarusNLP e5-small** (lokal) | 9, 12 | Semantic embedding + cosine similarity | Data DIPA internal (tidak keluar server) |
-| 3 | **TreasurAI OSS 120B** (internal Kemenkeu) | 10 | Reasoning kualitatif anomali | Data DIPA + hasil analisis (jaringan Kemenkeu) |
+| 3 | **TreasurAI OSS 120B** (internal Kemenkeu) | 10 | Reasoning kualitatif **semua** anomali keselarasan (1,542 item) + koherensi L3 (19,235 baris); di-grounding ke RPJMN/RKP via kl_context.py | Data DIPA + hasil analisis (jaringan Kemenkeu) |
 
 **Prinsip akhir:** Sistem ini bukan "satu AI yang memutuskan segalanya" — melainkan pipeline bertahap di mana setiap komponen melakukan apa yang paling ia kuasai: LLM cloud untuk pembersihan teks publik, model embedding lokal untuk analisis kuantitatif data sensitif, LLM internal untuk judgment kualitatif. Hasilnya adalah analisis yang dapat diaudit, transparan, dan aman dari perspektif keamanan data pemerintah.
 
@@ -788,6 +849,6 @@ Bayangkan sistem ini seperti seorang auditor berpengalaman yang memeriksa lapora
 | `deepseek_policy_nodes` | Script 04/14 | 963 | Node PN/PP/KP knowledge graph |
 | `deepseek_policy_edges` | Script 05 | 857 | Relasi hierarki |
 | `deepseek_policy_kl_assignments` | Script 08 | 604 | Penugasan K/L per KP |
-| `ddac_anomaly_2026` | Script 10/11 | ~N | Keselarasan DIPA vs RPJMN/RKP |
-| `ddac_coherence_2026` | Script 12/13 | 1.504.455 | Koherensi internal 3 level |
+| `ddac_anomaly_2026` | Script 10/11 | 7.235 | Keselarasan DIPA vs RPJMN/RKP; 1,542 item dengan reasoning TreasurAI oss120b |
+| `ddac_coherence_2026` | Script 12/13/15 | 1.504.455 | Koherensi internal 3 level; 19,235 baris dengan reasoning TreasurAI oss120b |
 | `ddac_coherence_akun_2026` | Script 13 | ~8.000 | Detail peer komposisi akun L3 |
