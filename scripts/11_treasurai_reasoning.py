@@ -118,7 +118,7 @@ for i, (aid, atype, kl, kl_name, score, prio, txt, best_kp, top3_json) in enumer
                 "temperature": 0.1, "max_tokens": 1200,
             },
             headers={"Content-Type": "application/json", "X-API-Key": TREASURY_KEY},
-            timeout=60,
+            timeout=(15, 90),
             verify=False,
         )
         if r.status_code == 200:
