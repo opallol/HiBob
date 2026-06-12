@@ -15,6 +15,12 @@ Usage:
   python scripts/15_coherence_reasoning.py 30 20         # L3 top-30, L1/L2 top-20
 """
 import json, requests, time, sys
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Fix Windows console encoding untuk karakter Unicode dari TreasurAI
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 from common.config import TREASURAI_BASE_URL, TREASURAI_API_KEY, TREASURAI_MODELS
 from common.db import get_connection
@@ -112,7 +118,8 @@ def call_treasurai(prompt):
                 "temperature": 0.1, "max_tokens": 1200,
             },
             headers={"Content-Type": "application/json", "X-API-Key": TREASURY_KEY},
-            timeout=30,
+            timeout=60,
+            verify=False,
         )
         if r.status_code == 200:
             data      = r.json()
@@ -217,7 +224,7 @@ def process_l3(conn, cur, limit):
                   AND llm_reasoning IS NULL
             """, (reasoning, MODEL, verdict, status, kl, prog, keg, out))
             conn.commit()
-            print("  [%s] %s\n" % (verdict, reasoning[:180]))
+            print("  [%s] %s\n" % (verdict, reasoning[:500]))
 
         time.sleep(0.3)
 
@@ -304,7 +311,7 @@ def process_l1l2(conn, cur, limit):
                   AND llm_reasoning IS NULL
             """, (reasoning, MODEL, verdict, status, kl, prog, keg))
             conn.commit()
-            print("  [%s] %s\n" % (verdict, reasoning[:180]))
+            print("  [%s] %s\n" % (verdict, reasoning[:500]))
 
         time.sleep(0.3)
 
