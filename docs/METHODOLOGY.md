@@ -161,6 +161,70 @@ verdict: "false_positive" (sesuai RPJMN) / "valid" / "manual_review"
 
 ---
 
+## Skala Data yang Dianalisis
+
+> Angka-angka berikut adalah kondisi aktual per tanggal analisis (2026-06-13), diambil langsung dari database `ddac2026`.
+
+### Sumber Data 1 — DIPA 2026 (Input Utama)
+
+DIPA (Daftar Isian Pelaksanaan Anggaran) adalah dokumen pelaksanaan anggaran resmi yang diterima setiap K/L dari Kemenkeu untuk tahun anggaran 2026.
+
+| Dimensi | Jumlah |
+|---------|--------|
+| **Total baris** | 1.504.455 |
+| **Total pagu APBN 2026** | **Rp 3.559,73 T** |
+| Kementerian/Lembaga (K/L) | 100 |
+| Program | 111 |
+| Kegiatan | 2.716 |
+| Output/KRO | 2.895 |
+| Kode akun belanja (2-digit) | 439 |
+
+**Komposisi berdasarkan jenis belanja:**
+
+| Jenis | Baris | Pagu | Keterangan |
+|-------|-------|------|-----------|
+| Substantif | 791.535 | Rp 1.070,89 T | Output programatik — sasaran analisis keselarasan |
+| Rutin/internal | 712.920 | Rp 2.488,84 T | Output EB-series + K/L 999 (BAUN) + Dukungan Manajemen — dikecualikan dari analisis keselarasan |
+
+> **Catatan:** Pagu Rp 2.488,84 T yang "rutin/internal" bukan berarti tidak penting — sebagian besar adalah transfer ke daerah, subsidi, dan belanja wajib (APBN kewajiban). Yang dikecualikan adalah belanja yang memang tidak dirancang untuk menghasilkan output substantif RPJMN.
+
+---
+
+### Sumber Data 2 — Knowledge Base RPJMN/RKP (Referensi Kebijakan)
+
+Knowledge base dibangun dari dokumen perencanaan nasional resmi yang dipublikasikan pemerintah.
+
+| Dimensi | Jumlah |
+|---------|--------|
+| Dokumen PDF yang diproses | 17 |
+| Halaman yang diekstrak | 4.478 |
+| Total kata | 735.722 |
+| **Node kebijakan** | **963** |
+| — Prioritas Nasional (PN) | 43 |
+| — Program Prioritas (PP) | 167 |
+| — Kegiatan Prioritas (KP) | 753 |
+| Relasi hierarki (edges) | 857 |
+| Penugasan K/L ke KP | 604 (72 K/L unik) |
+
+---
+
+### Output Analisis yang Dihasilkan
+
+Setelah seluruh pipeline berjalan, berikut yang dihasilkan dari 1.504.455 baris DIPA:
+
+| Jalur Analisis | Cakupan | Anomali Ditemukan | Pagu Terindikasi |
+|---------------|---------|-------------------|-----------------|
+| **Keselarasan RPJMN/RKP** | 7.235 unique alignment texts | 1.542 (1 orphan + 1.541 weak) | Rp 152,06 T |
+| **Koherensi L3 — Peer Akun** | 7.228 output unik | ~1.101 output berdeviasi | Rp 520 T |
+| **Koherensi L1 — Program↔Kegiatan** | 2.716 pasang unik | 14.272 baris flagged | — |
+| **Koherensi L2 — Kegiatan↔Output** | 2.895 pasang unik | 16.310 baris flagged | — |
+
+**Yang di-reasoning oleh TreasurAI OSS 120B:**
+- 1.542 item keselarasan (100% dari anomali keselarasan)
+- 19.235 baris koherensi L3 top-pagu (30 output unik dengan pagu tertinggi)
+
+---
+
 ## Fase 1 — Inventarisasi dan Ekstraksi Dokumen
 
 ### Detail Teknis

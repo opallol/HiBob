@@ -203,6 +203,14 @@ export default function BubbleCanvas({ nodes, mode, manifest, selectedId, focusN
           nodeLabel={(n: any) => nodeTooltip(n, manifest)}
           linkColor={(l: any) => `${l.accent}22`}
           linkWidth={0.6}
+          onNodeDragEnd={(n: any) => {
+            if (n.hub) {
+              // d3 clears fx/fy synchronously after this callback fires,
+              // so we re-pin AFTER d3 finishes via setTimeout
+              const x = n.x, y = n.y;
+              setTimeout(() => { n.fx = x; n.fy = y; }, 0);
+            }
+          }}
           onNodeClick={(n: any) => {
             if (!n.hub && n.data) onSelect(n.data);
             else if (n.hub && fgRef.current) {

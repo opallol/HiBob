@@ -16,6 +16,7 @@ export default function App() {
   const [nodes, setNodes] = useState<BubbleNode[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [view, setView] = useState<"map" | "pipeline">(initialView);
+  const [activeDataset, setActiveDataset] = useState<"coherence" | "alignment">("alignment");
 
   useEffect(() => {
     Promise.all([loadManifest(), loadNodes()])
@@ -64,10 +65,10 @@ export default function App() {
 
   return (
     <div className="flex h-full w-full flex-col">
-      <Header manifest={manifest} view={view} onView={setView} />
+      <Header manifest={manifest} view={view} onView={setView} activeDataset={activeDataset} />
       <main className="min-h-0 flex-1 overflow-hidden">
         {view === "map" ? (
-          <Explorer manifest={manifest} nodes={nodes} />
+          <Explorer manifest={manifest} nodes={nodes} onDatasetChange={setActiveDataset} />
         ) : (
           <div className="scroll-thin h-full overflow-y-auto">
             <PipelineSection />

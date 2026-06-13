@@ -11,6 +11,7 @@ interface Props {
   manifest: Manifest;
   nodes: BubbleNode[];
   embed?: boolean;
+  onDatasetChange?: (ds: "coherence" | "alignment") => void;
 }
 
 const ALIGN_MODES: { key: ModeKey; label: string }[] = [
@@ -27,7 +28,7 @@ const COH_FILTERS: { key: CohFilter; label: string }[] = [
   { key: "sem", label: "L1/L2 Semantik" },
 ];
 
-export default function Explorer({ manifest, nodes, embed }: Props) {
+export default function Explorer({ manifest, nodes, embed, onDatasetChange }: Props) {
   const [dataset, setDataset]       = useState<"coherence" | "alignment">("alignment");
   const [cohFilter, setCohFilter]   = useState<CohFilter>("all");
   const [alignNodes, setAlignNodes] = useState<BubbleNode[] | null>(null);
@@ -75,6 +76,7 @@ export default function Explorer({ manifest, nodes, embed }: Props) {
     setMode("pat");
     setSelectedId(null);
     setDetail(null);
+    onDatasetChange?.(ds);
   }
 
   function handleCohFilter(f: CohFilter) {

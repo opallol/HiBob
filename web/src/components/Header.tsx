@@ -5,9 +5,10 @@ interface Props {
   manifest: Manifest;
   view: "map" | "pipeline";
   onView: (v: "map" | "pipeline") => void;
+  activeDataset: "coherence" | "alignment";
 }
 
-export default function Header({ manifest, view, onView }: Props) {
+export default function Header({ manifest, view, onView, activeDataset }: Props) {
   return (
     <header className="flex shrink-0 items-center justify-between border-b border-ink-800 bg-ink-900/80 px-5 py-3 backdrop-blur">
       <div className="flex items-center gap-3">
@@ -22,7 +23,10 @@ export default function Header({ manifest, view, onView }: Props) {
             </span>
           </div>
           <div className="text-[11px] text-ink-600">
-            {manifest.totals.anomaly_nodes} anomali · {rupiahT(manifest.totals.total_pagu)} · {manifest.totals.kl} K/L
+            {activeDataset === "alignment"
+              ? `${(manifest.align_totals?.alignment_nodes ?? 0).toLocaleString()} anomali · ${rupiahT(manifest.align_totals?.total_pagu ?? 0)} · ${manifest.align_totals?.kl ?? "—"} K/L`
+              : `${manifest.totals.anomaly_nodes.toLocaleString()} anomali · ${rupiahT(manifest.totals.total_pagu)} · ${manifest.totals.kl} K/L`
+            }
           </div>
         </div>
       </div>
