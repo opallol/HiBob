@@ -38,14 +38,24 @@ LIMIT_L3      = int(sys.argv[1]) if len(sys.argv) > 1 else 30
 LIMIT_L1L2    = int(sys.argv[2]) if len(sys.argv) > 2 else 0   # default off
 
 SYSTEM_PROMPT = """Kamu adalah TreasurAI, asisten analisis anggaran ahli di Ditjen Perbendaharaan. \
-Analisis anomali koherensi internal struktur DIPA.
+Tugasmu menilai apakah pola belanja (komposisi akun, atau koherensi nama struktur) suatu \
+output DIPA yang menyimpang dari peer merupakan masalah nyata atau dapat dijustifikasi.
 
-Untuk setiap item:
-1. Jelaskan mengapa pola ini berbeda dari lazimnya
-2. Tentukan: anomali valid, false positive, atau perlu review manual
-3. Beri rekomendasi 1 kalimat
+PENTING — menyimpang dari peer BUKAN otomatis berarti salah. Pola berbeda sering JUSTRU \
+sesuai sifat program (mis. program Makan Bergizi 100% belanja barang; beasiswa 100% bantuan \
+sosial). Bila deviasi DAPAT dijustifikasi oleh mandat/sifat program → itu false_positive.
 
-Jawaban maksimal 4 kalimat, Bahasa Indonesia formal."""
+Tentukan SATU verdict:
+- valid          : pola menyimpang signifikan DAN tidak dapat dijustifikasi oleh mandat \
+RPJMN/RKP maupun sifat program → perlu ditindaklanjuti.
+- false_positive : deviasi nyata tetapi DAPAT dijustifikasi oleh mandat khusus atau sifat \
+program → bukan masalah.
+- manual_review  : bukti tidak cukup untuk memutuskan.
+
+Format jawaban (Bahasa Indonesia formal, maksimal 4 kalimat):
+1. Penjelasan singkat penyebab pola berbeda dan kaitannya dengan mandat/sifat program.
+2. Rekomendasi 1 kalimat.
+Lalu BARIS TERAKHIR wajib persis: VERDICT: valid | VERDICT: false_positive | VERDICT: manual_review"""
 
 CAT_LABELS = {
     "51": "Belanja Pegawai",
@@ -111,34 +121,41 @@ def fmt_akun(detail_json):
 
 
 def call_treasurai(prompt):
-    """Panggil TreasurAI, return (reasoning, verdict, review_status) atau None jika error."""
-    try:
-        r = requests.post(
-            TREASURY_URL,
-            json={
-                "prompt": prompt, "session_id": None,
-                "system_prompt": SYSTEM_PROMPT,
-                "temperature": 0.1, "max_tokens": 1200,
-            },
-            headers={"Content-Type": "application/json", "X-API-Key": TREASURY_KEY},
-            timeout=(15, 90),
-            verify=False,
-        )
-        if r.status_code == 200:
-            data      = r.json()
-            reasoning = (data.get("response") or data.get("text")
-                         or data.get("content") or str(data))[:2000]
-            verdict   = parse_verdict(reasoning)
-            status    = {"false_positive": "dismissed",
-                         "valid":          "confirmed",
-                         "manual_review":  "needs_review"}.get(verdict, "pending")
-            return reasoning, verdict, status
-        else:
-            print("  HTTP %d: %s" % (r.status_code, r.text[:200]))
-            return None
-    except Exception as e:
-        print("  ERR: %s" % str(e)[:200])
+    """Panggil TreasurAI, return (reasoning, verdict, review_status) atau None jika error.
+    Resilient: read-timeout pendek + retry ringan; item gagal di-skip & diulang next run."""
+    r = None
+    for attempt in range(3):
+        try:
+            r = requests.post(
+                TREASURY_URL,
+                json={
+                    "prompt": prompt, "session_id": None,
+                    "system_prompt": SYSTEM_PROMPT,
+                    "temperature": 0.1, "max_tokens": 700,
+                },
+                headers={"Content-Type": "application/json", "X-API-Key": TREASURY_KEY},
+                timeout=(10, 45),
+                verify=False,
+            )
+            break
+        except Exception as e:
+            print("  retry %d/3: %s" % (attempt + 1, str(e)[:80]))
+            time.sleep(2 * (attempt + 1))
+            r = None
+    if r is None:
+        print("  SKIP (gagal setelah retry)")
         return None
+    if r.status_code == 200:
+        data      = r.json()
+        reasoning = (data.get("response") or data.get("text")
+                     or data.get("content") or str(data))[:2000]
+        verdict   = parse_verdict(reasoning)
+        status    = {"false_positive": "dismissed",
+                     "valid":          "confirmed",
+                     "manual_review":  "needs_review"}.get(verdict, "pending")
+        return reasoning, verdict, status
+    print("  HTTP %d: %s" % (r.status_code, r.text[:200]))
+    return None
 
 
 # ── L3 — Komposisi Akun vs Peer ──────────────────────────────────────────────
@@ -197,9 +214,8 @@ def process_l3(conn, cur, limit):
             "%s\n"
             "Total pagu K/L ini: Rp %.2f T\n"
             "%s\n"
-            "Pertanyaan: Apakah pola belanja yang sangat berbeda dari %d K/L peer ini "
-            "dapat dijelaskan oleh mandat RPJMN/RKP K/L tersebut? "
-            "Anomali valid, false positive karena mandat khusus, atau perlu review manual?"
+            "Pertanyaan: Apakah pola belanja yang berbeda dari %d K/L peer ini dapat "
+            "dijustifikasi oleh mandat RPJMN/RKP K/L tersebut atau oleh sifat programnya?"
         ) % (
             kl, (kl_name  or "")[:60],
             prog, (prog_name or "")[:80],

@@ -39,6 +39,16 @@ QUERY_PREFIX  = "query: "
 # Percentile cut-offs (rank dalam distribusi skor aktual).
 PCT = {"strong": 85, "moderate": 50, "weak": 15}
 
+# Mandate-aware anchoring (Fix D4, 2026-06-14):
+# best_match (anchor yang ditampilkan + dipakai reasoning) di-PRIORITASKAN ke KP
+# yang DITUGASKAN ke K/L tsb di RPJMN/RKP Lampiran III, bukan argmax global atas
+# 753 KP. Mencegah anchor absurd akibat lexical overlap (mis. "Program Sumber Daya
+# Kesehatan/Jaminan Kesehatan" K/L 024 ter-anchor ke "Sumber Daya Hayati/Ekosistem").
+# Anchor mandat dipakai jika skornya >= skor global terbaik - MANDATE_DELTA.
+# alignment_score (dasar klasifikasi percentile) tetap = skor global terbaik
+# (konservatif: mengukur kedekatan ke prioritas nasional manapun).
+MANDATE_DELTA = 8.0
+
 # Absolute floor: item hanya bisa jadi policy_orphan jika skor JUGA di bawah
 # nilai ini. Mencegah item dengan skor cukup tinggi tapi kebetulan rank rendah
 # karena distribusi terkompres.
@@ -63,14 +73,23 @@ ROUTINE_EB_PREFIX = "EB"
 ROUTINE_PROGRAM_PATTERN = "dukungan manajemen"
 
 
-def _ensure_verdict_column(cur):
+def _ensure_column(cur, name, ddl):
     cur.execute(
         f"""SELECT COUNT(*) FROM information_schema.columns
            WHERE table_schema=DATABASE() AND table_name='{T_ANOMALY}'
-             AND column_name='treasurai_verdict'""")
+             AND column_name='{name}'""")
     if cur.fetchone()[0] == 0:
-        cur.execute(f"ALTER TABLE {T_ANOMALY} "
-                    "ADD COLUMN treasurai_verdict VARCHAR(20) NULL AFTER llm_model")
+        cur.execute(f"ALTER TABLE {T_ANOMALY} ADD COLUMN {ddl}")
+
+
+def _ensure_verdict_column(cur):
+    _ensure_column(cur, "treasurai_verdict",
+                   "treasurai_verdict VARCHAR(20) NULL AFTER llm_model")
+    # Fix D4: kolom anchor mandat (transparansi + input prompt reasoning)
+    _ensure_column(cur, "mandate_match_code",  "mandate_match_code VARCHAR(20) NULL")
+    _ensure_column(cur, "mandate_match_name",  "mandate_match_name VARCHAR(300) NULL")
+    _ensure_column(cur, "mandate_match_score", "mandate_match_score DECIMAL(6,2) NULL")
+    _ensure_column(cur, "anchored_on_mandate", "anchored_on_mandate TINYINT(1) NOT NULL DEFAULT 0")
 
 
 def main():
@@ -102,6 +121,23 @@ def main():
     kp_info  = [{"id": r[0], "type": r[1], "code": r[2],
                  "name": r[3], "source": r[4]} for r in kp_rows]
     print("[%.0fs] KP vectors ready (%d)" % (time.time() - t0, len(kp_rows)))
+
+    # Fix D4: peta kddept -> indeks KP yang ditugaskan ke K/L tsb (Lampiran III).
+    # Dipakai untuk menghitung mandate_best (kedekatan ke prioritas yang memang
+    # diamanahkan ke K/L itu), bukan hanya argmax global.
+    nodeid_to_idx = {info["id"]: i for i, info in enumerate(kp_info)}
+    cur.execute("""
+        SELECT ka.kddept, n.id
+        FROM deepseek_policy_kl_assignments ka
+        JOIN deepseek_policy_nodes n ON ka.node_id = n.id
+        WHERE n.node_type = 'KP'
+    """)
+    kl_kp_indices = {}
+    for kddept, nid in cur.fetchall():
+        idx = nodeid_to_idx.get(nid)
+        if idx is not None:
+            kl_kp_indices.setdefault(kddept, []).append(idx)
+    print("[%.0fs] Mandate map: %d K/L with assigned KP" % (time.time() - t0, len(kl_kp_indices)))
 
     # ------------------------------------------------------------------
     # STEP 2: Unique alignment texts + embed
@@ -191,9 +227,27 @@ def main():
         scores  = [float(s * 100) for s in top3_scores[i]]
         indices = [int(idx) for idx in top3_indices[i]]
 
-        best_score = scores[0]
+        best_score = scores[0]          # skor global terbaik (max atas semua KP)
         best_kp    = kp_info[indices[0]]
         rank       = pct_rank(best_score)
+
+        # Fix D4: hitung mandate_best = KP terbaik di antara KP yang ditugaskan
+        # ke K/L ini. Anchor di-prioritaskan ke mandat bila cukup dekat.
+        kl_kode_for_mandate = kl_lookup.get(ti["sample_id"], (None,)*2)[1]
+        mand_idx_list = kl_kp_indices.get(kl_kode_for_mandate, [])
+        mandate_code = mandate_name = None
+        mandate_score = None
+        anchored_on_mandate = 0
+        if mand_idx_list:
+            row_sims = sim_matrix[i]
+            m_best_local = max(mand_idx_list, key=lambda idx: row_sims[idx])
+            mandate_score = float(row_sims[m_best_local] * 100)
+            mandate_code  = kp_info[m_best_local]["code"]
+            mandate_name  = kp_info[m_best_local]["name"]
+            # Anchor ke mandat jika skornya tidak jauh di bawah global terbaik.
+            if mandate_score >= best_score - MANDATE_DELTA:
+                best_kp = kp_info[m_best_local]
+                anchored_on_mandate = 1
 
         # Alignment strength (relative)
         if rank >= PCT["strong"]:
@@ -250,12 +304,17 @@ def main():
         if not kl_row:
             continue
 
+        # best_match_score = skor anchor (mandat bila anchored, else global)
+        anchor_score = mandate_score if anchored_on_mandate else best_score
         batch.append((
             ti["sample_id"], kl_row[1], kl_row[2], kl_row[3], kl_row[4], kl_row[5],
             round(best_score, 2), strength, None, None,
-            best_kp["source"], best_kp["code"], best_kp["name"][:300], round(best_score, 2),
+            best_kp["source"], best_kp["code"], best_kp["name"][:300], round(anchor_score, 2),
             top3_json,
             nature, atype, round(ascore, 2), round(materiality, 2), round(review_priority, 2),
+            mandate_code, (mandate_name[:300] if mandate_name else None),
+            (round(mandate_score, 2) if mandate_score is not None else None),
+            anchored_on_mandate,
         ))
 
         if len(batch) >= batch_size:
@@ -266,8 +325,9 @@ def main():
                  alignment_score, alignment_strength, rpjmn_alignment, rkp_alignment,
                  best_match_type, best_match_code, best_match_name, best_match_score,
                  top3_matches, spending_nature, anomaly_type,
-                 anomaly_score, materiality_score, review_priority)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                 anomaly_score, materiality_score, review_priority,
+                 mandate_match_code, mandate_match_name, mandate_match_score, anchored_on_mandate)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """, batch)
             conn.commit()
             total_ins += len(batch)
@@ -285,8 +345,9 @@ def main():
              alignment_score, alignment_strength, rpjmn_alignment, rkp_alignment,
              best_match_type, best_match_code, best_match_name, best_match_score,
              top3_matches, spending_nature, anomaly_type,
-             anomaly_score, materiality_score, review_priority)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+             anomaly_score, materiality_score, review_priority,
+             mandate_match_code, mandate_match_name, mandate_match_score, anchored_on_mandate)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, batch)
         conn.commit()
         total_ins += len(batch)

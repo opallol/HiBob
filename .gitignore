@@ -13,3 +13,7 @@ venv/
 # Output / logs
 output/
 *.log
+
+# audit re-run artifacts
+logs_*.txt
+rerun_done.flag
