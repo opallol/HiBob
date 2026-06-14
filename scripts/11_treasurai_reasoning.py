@@ -27,6 +27,7 @@ T_ANOMALY = TABLE_ANOMALY
 T_PAGU    = TABLE_PAGU_AKUN
 from common.verdict import parse_verdict
 from common.kl_context import get_kl_mandate_context
+from common.treasurai_call import call_with_timeout
 
 # === CONFIG ===
 MODEL        = "oss120b"
@@ -140,27 +141,14 @@ for i, (aid, atype, kl, kl_name, score, prio, txt, best_kp, top3_json,
     print("[%d/%d] %s [%s] prio=%.1f — %s..." % (
         i+1, len(items), kl, atype, prio, (txt or "")[:60]))
 
-    # Resilient: read-timeout pendek + retry ringan. Item yang gagal tetap NULL
-    # dan akan diambil lagi saat script di-run ulang (resume-safe).
-    r = None
-    for attempt in range(3):
-        try:
-            r = requests.post(
-                TREASURY_URL,
-                json={
-                    "prompt": prompt, "session_id": None,
-                    "system_prompt": SYSTEM_PROMPT,
-                    "temperature": 0.1, "max_tokens": 700,
-                },
-                headers={"Content-Type": "application/json", "X-API-Key": TREASURY_KEY},
-                timeout=(10, 45),
-                verify=False,
-            )
-            break
-        except Exception as e:
-            print("  retry %d/3: %s" % (attempt + 1, str(e)[:80]))
-            time.sleep(2 * (attempt + 1))
-            r = None
+    # Resilient: hard wall-clock timeout per call (tahan hang/throttle).
+    # Item gagal tetap NULL → diambil lagi saat script di-run ulang (resume-safe).
+    r, err = call_with_timeout(
+        TREASURY_URL,
+        {"prompt": prompt, "session_id": None,
+         "system_prompt": SYSTEM_PROMPT, "temperature": 0.1, "max_tokens": 700},
+        {"Content-Type": "application/json", "X-API-Key": TREASURY_KEY},
+    )
     try:
         if r is not None and r.status_code == 200:
             data     = r.json()
@@ -183,7 +171,7 @@ for i, (aid, atype, kl, kl_name, score, prio, txt, best_kp, top3_json,
         elif r is not None:
             print("  HTTP %d: %s\n" % (r.status_code, r.text[:200]))
         else:
-            print("  SKIP (gagal setelah retry, akan diulang di run berikutnya)\n")
+            print("  SKIP (%s, akan diulang di run berikutnya)\n" % err)
     except Exception as e:
         print("  ERR: %s\n" % str(e)[:200])
 

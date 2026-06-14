@@ -29,6 +29,7 @@ T_COH      = TABLE_COHERENCE
 T_COH_AKUN = TABLE_COHERENCE_AKUN
 from common.verdict import parse_verdict
 from common.kl_context import get_kl_mandate_context
+from common.treasurai_call import call_with_timeout
 
 # === CONFIG ===
 MODEL         = "oss120b"
@@ -123,27 +124,14 @@ def fmt_akun(detail_json):
 def call_treasurai(prompt):
     """Panggil TreasurAI, return (reasoning, verdict, review_status) atau None jika error.
     Resilient: read-timeout pendek + retry ringan; item gagal di-skip & diulang next run."""
-    r = None
-    for attempt in range(3):
-        try:
-            r = requests.post(
-                TREASURY_URL,
-                json={
-                    "prompt": prompt, "session_id": None,
-                    "system_prompt": SYSTEM_PROMPT,
-                    "temperature": 0.1, "max_tokens": 700,
-                },
-                headers={"Content-Type": "application/json", "X-API-Key": TREASURY_KEY},
-                timeout=(10, 45),
-                verify=False,
-            )
-            break
-        except Exception as e:
-            print("  retry %d/3: %s" % (attempt + 1, str(e)[:80]))
-            time.sleep(2 * (attempt + 1))
-            r = None
+    r, err = call_with_timeout(
+        TREASURY_URL,
+        {"prompt": prompt, "session_id": None,
+         "system_prompt": SYSTEM_PROMPT, "temperature": 0.1, "max_tokens": 700},
+        {"Content-Type": "application/json", "X-API-Key": TREASURY_KEY},
+    )
     if r is None:
-        print("  SKIP (gagal setelah retry)")
+        print("  SKIP (%s)" % err)
         return None
     if r.status_code == 200:
         data      = r.json()
