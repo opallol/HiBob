@@ -249,31 +249,32 @@ def main():
     # =====================================================================
     print("\n[%.0fs] LEVEL 3: output<->akun peer comparison" % (time.time() - t0))
 
-    # Peer profile: global category totals across ALL K/L (raw pagu, not shares).
-    cur.execute(
-        f"SELECT outputkro_kode, LEFT(akun_kode,2) cat, CAST(SUM(total_pagu) AS DOUBLE) "
-        f"FROM {T_PAGU} WHERE total_pagu > 0 GROUP BY outputkro_kode, LEFT(akun_kode,2)"
-    )
-    peer_cat = {}    # out -> {cat: pagu}
-    for out, cat, pagu in cur.fetchall():
-        peer_cat.setdefault(out, {})[cat] = pagu
-    cur.execute(
-        f"SELECT outputkro_kode, COUNT(DISTINCT kementerian_kode) "
-        f"FROM {T_PAGU} WHERE total_pagu > 0 GROUP BY outputkro_kode"
-    )
-    peer_count = {out: n for out, n in cur.fetchall()}
-
-    # Fix 3A: Per-KL contribution to each output's totals (for self-exclusion).
+    # Peer profile via MEAN-OF-SHARES (Fix L3, 2026-06-14): tiap K/L = satu
+    # observasi dengan BOBOT SAMA, bukan pooled pagu-weighted. Pooling lama membuat
+    # satu K/L ber-pagu raksasa mendefinisikan 'norma' sehingga memunculkan anomali
+    # palsu (terbukti ~17% temuan L3 lama: mis. output QMA, satu K/L Rp1,7T modal
+    # menutupi 28 K/L lain yang barang). Mean-of-shares sesuai metode terdokumentasi
+    # dan benar untuk pertanyaan 'apakah komposisi K/L ini tidak lazim dibanding peer'.
     cur.execute(
         f"SELECT outputkro_kode, kementerian_kode, LEFT(akun_kode,2) cat, "
         "CAST(SUM(total_pagu) AS DOUBLE) "
         f"FROM {T_PAGU} WHERE total_pagu > 0 "
         "GROUP BY outputkro_kode, kementerian_kode, LEFT(akun_kode,2)"
     )
-    kl_contrib = {}  # (out, kl) -> {cat: pagu}
+    out_kl_cat = {}  # out -> kl -> {cat: pagu}
     for out, kl, cat, pagu in cur.fetchall():
-        kl_contrib.setdefault((out, kl), {})[cat] = pagu
-    print("[%.0fs]   peer profiles for %s output codes" % (time.time() - t0, format(len(peer_cat), ",")))
+        out_kl_cat.setdefault(out, {}).setdefault(kl, {})[cat] = pagu
+    out_kl_share = {}  # out -> kl -> {cat: share}  (tiap K/L dinormalisasi sendiri)
+    for out, klmap in out_kl_cat.items():
+        sh = {}
+        for kl, cats in klmap.items():
+            tot = sum(cats.values())
+            if tot > 0:
+                sh[kl] = {c: v / tot for c, v in cats.items()}
+        out_kl_share[out] = sh
+    peer_count = {out: len(sh) for out, sh in out_kl_share.items()}
+    print("[%.0fs]   peer profiles (mean-of-shares) for %s output codes"
+          % (time.time() - t0, format(len(out_kl_share), ",")))
 
     # Own profile per (kl,prog,keg,out)
     cur.execute(
@@ -293,21 +294,21 @@ def main():
     n_detail_skipped = 0
     for combo, cats in own.items():
         kl, prog, keg, out = combo
-        pcat_global = peer_cat.get(out)
-        pc_total = peer_count.get(out, 0)
+        klshare = out_kl_share.get(out)
         tot = sum(cats.values())
-        if not pcat_global or tot <= 0:
+        if not klshare or tot <= 0:
             continue
 
-        # Fix 3A: subtract own K/L from global peer aggregate
-        own_kl = kl_contrib.get((out, kl), {})
-        pcat_others = {c: max(0.0, pcat_global.get(c, 0.0) - own_kl.get(c, 0.0))
-                       for c in pcat_global}
-        others_total = sum(pcat_others.values())
-        pc = max(0, pc_total - 1)  # peer count excluding self
-        if others_total <= 0:
-            continue  # this K/L is the only one for this output — no peer to compare
-        psh = {c: v / others_total for c, v in pcat_others.items() if v > 0}
+        # peer = rata-rata share atas K/L LAIN (self-excluded), bobot sama tiap K/L
+        peers = [k for k in klshare if k != kl]
+        pc = len(peers)
+        if pc <= 0:
+            continue  # hanya K/L ini yang punya output ini — tak ada peer pembanding
+        psh = {}
+        for pkl in peers:
+            for c, s in klshare[pkl].items():
+                psh[c] = psh.get(c, 0.0) + s
+        psh = {c: v / pc for c, v in psh.items()}
 
         osh = {c: v / tot for c, v in cats.items()}
         allcats = set(osh) | set(psh)
