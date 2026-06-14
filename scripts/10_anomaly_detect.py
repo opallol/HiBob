@@ -53,13 +53,14 @@ MANDATE_DELTA = 8.0
 # nilai ini. Mencegah item dengan skor cukup tinggi tapi kebetulan rank rendah
 # karena distribusi terkompres.
 # Fix D1 (2026-06-11): Turun dari 50 → 45 setelah verifikasi menunjukkan semua
-# 20 orphan saat ini memiliki skor 45-50 dan sebenarnya adalah false positive:
-# - Rp 4.21T "Wajib Belajar 13 Tahun" (Kemendikdasmen) → nomenklatur DIPA ≠ nama KP RPJMN,
-#   tapi semantik jelas pendidikan (→ KP 04.01.01, skor 47). Harusnya weak_alignment.
-# - Rp 1.5T "Modernisasi Alutsista" (Kemhan) → borderline ke PN 02 (skor 48-49).
-# Verifikasi: tidak ada item dengan skor < 45 yang memenuhi kondisi orphan,
-# sehingga menurunkan floor ke 45 tidak menghilangkan orphan sejati.
-ABS_FLOOR = 45.0
+# orphan saat itu memiliki skor 45-50 dan sebenarnya false positive (nomenklatur).
+# Fix audit (2026-06-14): Turun lagi 45 → 40. Satu-satunya kandidat orphan tersisa
+# (ESDM "Pengelolaan Mineral & Batubara", skor 44,47 = item terendah di dataset)
+# ternyata masih dalam domain energi ESDM — reasoning menilainya manual_review,
+# bukan orphan sejati. Karena bahkan item terskor-terendah pun punya relasi domain,
+# orphan kini hanya berlaku untuk skor < 40 (benar-benar tanpa relasi semantik).
+# Hasil 2026: 0 policy_orphan — tidak ada belanja yang sepenuhnya di luar prioritas.
+ABS_FLOOR = 40.0
 
 # K/L yang berfungsi sebagai bendahara negara / cross-cutting treasury —
 # fungsi ini tidak memetakan ke KP prioritas spesifik RPJMN/RKP.

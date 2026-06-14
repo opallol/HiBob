@@ -279,7 +279,62 @@ def export_knowledge_graph(cur):
     print("  knowledge_graph: %d node, %d edge" % (len(nodes), len(edges)))
 
 
-def export_pipeline(cur):
+def _breakdown(align_nodes, coh_nodes):
+    """Rincian kategori per analisis, dihitung dari node yang BENAR-BENAR ditampilkan
+    (jadi angkanya selalu cocok dengan peta). Dipakai seksi pipeline di web."""
+    SEM = {"l1", "l2", "l1l2"}
+
+    def vc(nodes, v):
+        return sum(1 for n in nodes if n["v"] == v)
+
+    a_weak   = sum(1 for n in align_nodes if n["pat"] == "weak")
+    a_orphan = sum(1 for n in align_nodes if n["pat"] == "orphan")
+    c_l3  = sum(1 for n in coh_nodes if n["pat"] not in SEM)
+    c_sem = sum(1 for n in coh_nodes if n["pat"] in SEM)
+
+    return {
+        "alignment": {
+            "title": "Keselarasan RPJMN/RKP",
+            "total": len(align_nodes),
+            "desc": "Apakah belanja DIPA selaras dengan Kegiatan Prioritas RPJMN/RKP.",
+            "jenis": [
+                {"label": "Weak alignment", "n": a_weak,
+                 "desc": "Ada KP terdekat tapi kemiripan semantik lemah — sering hanya beda nomenklatur."},
+                {"label": "Policy orphan", "n": a_orphan,
+                 "desc": "Tidak ada KP relevan sama sekali (skor < 40). Tahun 2026: tidak ditemukan."},
+            ],
+            "verdict": [
+                {"label": "False positive", "n": vc(align_nodes, "fp"),
+                 "desc": "Terjelaskan oleh mandat/nomenklatur — bukan masalah."},
+                {"label": "Perlu review", "n": vc(align_nodes, "review"),
+                 "desc": "Belum bisa dipastikan, perlu telaah manusia."},
+                {"label": "Valid", "n": vc(align_nodes, "valid"),
+                 "desc": "Belanja benar-benar di luar prioritas nasional — perlu tindak lanjut."},
+            ],
+        },
+        "coherence": {
+            "title": "Koherensi Akun",
+            "total": len(coh_nodes),
+            "desc": "Apakah struktur dan pola belanja internal DIPA konsisten.",
+            "jenis": [
+                {"label": "L3 Komposisi Akun", "n": c_l3,
+                 "desc": "Pola belanja (akun) janggal dibanding K/L lain dengan output sejenis."},
+                {"label": "L1/L2 Semantik", "n": c_sem,
+                 "desc": "Nama program–kegiatan–output tidak saling konsisten secara makna."},
+            ],
+            "verdict": [
+                {"label": "Valid", "n": vc(coh_nodes, "valid"),
+                 "desc": "Deviasi tak dapat dijustifikasi — perlu tindak lanjut."},
+                {"label": "False positive", "n": vc(coh_nodes, "fp"),
+                 "desc": "Terjustifikasi mandat atau sifat program — bukan masalah."},
+                {"label": "Perlu review", "n": vc(coh_nodes, "review"),
+                 "desc": "Bukti belum cukup untuk memutuskan."},
+            ],
+        },
+    }
+
+
+def export_pipeline(cur, align_nodes, coh_nodes):
     def scalar(q):
         cur.execute(q)
         return cur.fetchone()[0]
@@ -318,7 +373,9 @@ def export_pipeline(cur):
          "steps": ["oss120b enrich mandat RPJMN per K/L", "Verdict + rekomendasi tiap anomali"],
          "metric": "%s output ber-reasoning" % format(counts["reasoned"], ",")},
     ]
-    write_json(os.path.join(OUT_DIR, "pipeline.json"), {"phases": phases, "counts": counts})
+    breakdown = _breakdown(align_nodes, coh_nodes)
+    write_json(os.path.join(OUT_DIR, "pipeline.json"),
+               {"phases": phases, "counts": counts, "breakdown": breakdown})
     print("  pipeline: %d fase" % len(phases))
     return counts
 
@@ -419,7 +476,7 @@ def main():
     nodes, patterns, kl_names, cat = export_coherence(cur, mandat_idx)
     align_nodes, align_kl_names    = export_alignment(cur, mandat_idx)
     export_knowledge_graph(cur)
-    counts = export_pipeline(cur)
+    counts = export_pipeline(cur, align_nodes, nodes)
 
     total_pagu       = sum(n["pagu"] for n in nodes)
     align_total_pagu = sum(n["pagu"] for n in align_nodes)

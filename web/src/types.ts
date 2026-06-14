@@ -64,9 +64,22 @@ export interface PipelinePhase {
   metric: string;
 }
 
+export interface BreakdownItem {
+  label: string;
+  n: number;
+  desc: string;
+}
+export interface BreakdownGroup {
+  title: string;
+  total: number;
+  desc: string;
+  jenis: BreakdownItem[];
+  verdict: BreakdownItem[];
+}
 export interface Pipeline {
   phases: PipelinePhase[];
   counts: Record<string, number>;
+  breakdown?: { alignment: BreakdownGroup; coherence: BreakdownGroup };
 }
 
 export interface KGNode {

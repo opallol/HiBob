@@ -205,6 +205,62 @@ export default function PipelineSection() {
           ))}
         </div>
       </div>
+
+      {/* Rincian temuan per analisis */}
+      {pipe.breakdown && (
+        <div className="mt-14">
+          <h3 className="text-[16px] font-semibold text-slate-100">Rincian temuan per analisis</h3>
+          <p className="mt-1 text-[13px] text-slate-400">
+            Dua jenis analisis. Tiap item dikelompokkan menurut jenis pemeriksaannya, lalu
+            diberi hasil penilaian akhir oleh reasoning.
+          </p>
+          <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+            {(["alignment", "coherence"] as const).map((k) => {
+              const g = pipe.breakdown![k];
+              return (
+                <motion.div
+                  key={k}
+                  initial={{ opacity: 0, y: 12 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4 }}
+                  className="rounded-xl border border-ink-800 bg-ink-900/50 p-4"
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h4 className="text-[14px] font-medium text-slate-100">{g.title}</h4>
+                    <span className="text-[12px] tabular-nums text-emerald-400/90">
+                      {g.total.toLocaleString("id-ID")} item
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[12px] leading-snug text-slate-500">{g.desc}</p>
+
+                  {([
+                    ["Jenis pemeriksaan", g.jenis],
+                    ["Hasil penilaian", g.verdict],
+                  ] as const).map(([heading, items]) => (
+                    <div key={heading}>
+                      <div className="mt-3.5 text-[10px] uppercase tracking-wider text-ink-600">{heading}</div>
+                      <div className="mt-1.5 space-y-1.5">
+                        {items.map((it) => (
+                          <div key={it.label} className="flex gap-2.5">
+                            <span className="w-12 shrink-0 text-right text-[12px] font-medium tabular-nums text-slate-300">
+                              {it.n.toLocaleString("id-ID")}
+                            </span>
+                            <div className="leading-snug">
+                              <span className="text-[12px] text-slate-200">{it.label}</span>
+                              <span className="text-[11px] text-slate-500"> — {it.desc}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
