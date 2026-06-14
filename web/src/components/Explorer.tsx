@@ -15,6 +15,7 @@ interface Props {
 }
 
 const ALIGN_MODES: { key: ModeKey; label: string }[] = [
+  { key: "v",   label: "Status anomali" }, // default untuk keselarasan
   { key: "pat", label: "Jenis anomali" },
 ];
 
@@ -34,7 +35,8 @@ export default function Explorer({ manifest, nodes, embed, onDatasetChange }: Pr
   const [alignNodes, setAlignNodes] = useState<BubbleNode[] | null>(null);
   const [alignErr, setAlignErr]     = useState<string | null>(null);
 
-  const [mode, setMode]             = useState<ModeKey>("pat");
+  // default dataset = alignment → cluster awal "v" (Status anomali)
+  const [mode, setMode]             = useState<ModeKey>("v");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail]         = useState<NodeDetail | null>(null);
   const [loading, setLoading]       = useState(false);
@@ -81,7 +83,8 @@ export default function Explorer({ manifest, nodes, embed, onDatasetChange }: Pr
   function handleDataset(ds: "coherence" | "alignment") {
     if (ds === dataset) return;
     setDataset(ds);
-    setMode("pat");
+    // keselarasan default cluster "Status anomali"; koherensi tetap "pat"
+    setMode(ds === "alignment" ? "v" : "pat");
     setSelectedId(null);
     setDetail(null);
     onDatasetChange?.(ds);
