@@ -1,14 +1,11 @@
 """
-run_rerun_all.py — Orkestrator re-run reasoning pasca-audit (D1–D6).
-Menjalankan ulang reasoning alignment (script 11) lalu coherence (script 15)
-sampai TUNTAS, tahan terhadap stall/rate-limit TreasurAI (resume-safe).
+run_rerun_all.py — Orkestrator re-run reasoning pasca-audit (D1-D6), PARALEL.
+Menjalankan reason_parallel.py (alignment lalu coherence) sampai TUNTAS.
+Resume-safe; loop sampai 0 pending (menangkap item yang sempat ke-skip).
 
-Reasoning HANYA via TreasurAI oss120b (lihat script 11/15). Tidak ada DeepSeek.
+Reasoning HANYA via TreasurAI oss120b. Tidak ada DeepSeek.
 
-Catatan: clear reasoning coherence dilakukan SEKALI di awal fase 2 agar
-prompt/taksonomi baru (D2) diterapkan ke seluruh output.
-
-Usage: python scripts/run_rerun_all.py
+Usage: python scripts/run_rerun_all.py [workers]
 """
 import subprocess, sys, time
 sys.path.insert(0, "scripts")
@@ -16,6 +13,7 @@ from common.config import DB_CONFIG
 import pymysql
 
 PY = sys.executable
+WORKERS = sys.argv[1] if len(sys.argv) > 1 else "10"
 
 
 def q1(sql):
@@ -29,7 +27,6 @@ def align_remaining():
 
 
 def coh_remaining():
-    # L3 in-scope (akun_score>=40) + L1/L2 flagged, yang reasoning-nya NULL
     return q1("""
         SELECT
           (SELECT COUNT(*) FROM (
@@ -47,55 +44,36 @@ def coh_remaining():
                  OR JSON_CONTAINS(anomaly_flags, JSON_QUOTE('level2_kegiatan_output_lemah')))
                AND llm_reasoning IS NULL
              GROUP BY kementerian_kode, program_kode, kegiatan_kode, anomaly_flags
-          ) t2) AS total
-    """)
+          ) t2) AS total""")
 
 
-def run(cmd):
-    print(">>> RUN:", " ".join(cmd), flush=True)
-    subprocess.run(cmd, cwd=".")
+def run(mode):
+    subprocess.run([PY, "-u", "scripts/reason_parallel.py", mode, WORKERS], cwd=".")
 
 
 def main():
     t0 = time.time()
-    # ── FASE 1: ALIGNMENT ────────────────────────────────────────────────
-    print("=== FASE 1: alignment reasoning ===", flush=True)
-    last = -1
-    for attempt in range(40):
-        rem = align_remaining()
-        print("[align] sisa NULL: %d (attempt %d)" % (rem, attempt), flush=True)
-        if rem == 0:
+    print("=== FASE 1: alignment (paralel x%s) ===" % WORKERS, flush=True)
+    for _ in range(8):
+        if align_remaining() == 0:
             break
-        if rem == last:
-            # tidak ada kemajuan di pass sebelumnya — beri cooldown lalu lanjut
-            time.sleep(20)
-        last = rem
-        run([PY, "-u", "scripts/11_treasurai_reasoning.py", "2000"])
-    print("[align] SELESAI sisa=%d (%.0f menit)" % (align_remaining(), (time.time()-t0)/60), flush=True)
+        run("align")
+    print("[align] selesai sisa=%d (%.0f min)" % (align_remaining(), (time.time()-t0)/60), flush=True)
 
-    # ── FASE 2: COHERENCE ────────────────────────────────────────────────
-    print("\n=== FASE 2: coherence reasoning ===", flush=True)
-    # Clear sekali agar taksonomi baru (D2) diterapkan menyeluruh
+    print("\n=== FASE 2: coherence (paralel x%s) ===" % WORKERS, flush=True)
     c = pymysql.connect(**DB_CONFIG); cur = c.cursor()
     cur.execute("""UPDATE ddac_coherence_2026
         SET llm_reasoning=NULL, treasurai_verdict=NULL, review_status_coherence='pending'
         WHERE llm_reasoning IS NOT NULL""")
     c.commit(); print("[coh] cleared %d rows" % cur.rowcount, flush=True); c.close()
 
-    last = -1
-    for attempt in range(60):
-        rem = coh_remaining()
-        print("[coh] sisa in-scope NULL: %d (attempt %d)" % (rem, attempt), flush=True)
-        if rem == 0:
+    for _ in range(8):
+        if coh_remaining() == 0:
             break
-        if rem == last:
-            time.sleep(20)
-        last = rem
-        run([PY, "-u", "scripts/15_coherence_reasoning.py", "1200", "500"])
-    print("[coh] SELESAI sisa=%d" % coh_remaining(), flush=True)
+        run("coh")
+    print("[coh] selesai sisa=%d" % coh_remaining(), flush=True)
 
     print("\n=== ORKESTRATOR SELESAI (%.0f menit) ===" % ((time.time()-t0)/60), flush=True)
-    # Tulis penanda selesai
     with open("rerun_done.flag", "w") as f:
         f.write("done %.0f min\n" % ((time.time()-t0)/60))
 

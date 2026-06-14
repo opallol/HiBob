@@ -12,9 +12,12 @@ Usage:
   python scripts/11_treasurai_reasoning.py           # default top-50 weak + semua orphan
   python scripts/11_treasurai_reasoning.py 100       # top-100 weak_alignment
 """
-import json, requests, time, sys
+import json, requests, time, sys, os
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Jeda antar-call (detik). Default 4s untuk menghindari burst-throttle TreasurAI.
+PACE = float(os.environ.get("TREASURAI_PACE", "4"))
 
 # Fix Windows console encoding untuk karakter Unicode dari TreasurAI
 if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
@@ -175,7 +178,7 @@ for i, (aid, atype, kl, kl_name, score, prio, txt, best_kp, top3_json,
     except Exception as e:
         print("  ERR: %s\n" % str(e)[:200])
 
-    time.sleep(0.3)
+    time.sleep(PACE)   # jeda antar-call agar tidak memicu burst-throttle TreasurAI
 
 # Summary
 print("=" * 60)

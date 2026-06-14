@@ -14,9 +14,10 @@ Usage:
   python scripts/15_coherence_reasoning.py 50            # L3 top-50
   python scripts/15_coherence_reasoning.py 30 20         # L3 top-30, L1/L2 top-20
 """
-import json, requests, time, sys
+import json, requests, time, sys, os
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+PACE = float(os.environ.get("TREASURAI_PACE", "4"))
 
 # Fix Windows console encoding untuk karakter Unicode dari TreasurAI
 if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
@@ -233,7 +234,7 @@ def process_l3(conn, cur, limit):
             conn.commit()
             print("  [%s] %s\n" % (verdict, reasoning[:500]))
 
-        time.sleep(0.3)
+        time.sleep(PACE)
 
 
 # ── L1/L2 — Semantic Coherence ───────────────────────────────────────────────
@@ -320,7 +321,7 @@ def process_l1l2(conn, cur, limit):
             conn.commit()
             print("  [%s] %s\n" % (verdict, reasoning[:500]))
 
-        time.sleep(0.3)
+        time.sleep(PACE)
 
 
 # ── main ─────────────────────────────────────────────────────────────────────
