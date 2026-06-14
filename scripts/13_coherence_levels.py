@@ -189,6 +189,8 @@ def main():
     )
     pk = {}  # (kl,prog,keg) -> sim
     generic_prog_combos = set()
+    dm_prog_combos = set()   # HANYA program Dukungan Manajemen — dipakai utk exclusion L3
+                             # (generic_prog_combos juga memuat K/L militer yang L3-nya valid)
     for kl, prog, keg, pu, ku in cur.fetchall():
         c = cos(pu, ku)
         if c is not None:
@@ -197,6 +199,7 @@ def main():
         # Fix F1: Program Dukungan Manajemen adalah catch-all DIPA
         if any(p in pu_lower for p in GENERIC_PROGRAM_PATTERNS):
             generic_prog_combos.add((kl, prog, keg))
+            dm_prog_combos.add((kl, prog, keg))
         # Fix F2: Military K/L — model under-scores domain-specific terminology
         # (sama dengan MILITARY_DOMAIN_KL yang sudah dipakai di L2 / Fix E1)
         elif kl in MILITARY_DOMAIN_KL:
@@ -294,6 +297,15 @@ def main():
     n_detail_skipped = 0
     for combo, cats in own.items():
         kl, prog, keg, out = combo
+        # L3 exclusion (Fix audit, 2026-06-14): program "Dukungan Manajemen"
+        # dikecualikan dari L3 — overhead administratif lintas-K/L bervariasi wajar,
+        # komposisi akun-nya bukan sinyal kebijakan substantif (sebelumnya ~52%
+        # temuan "valid" koherensi berasal dari program manajemen = noise).
+        # CATATAN: pakai dm_prog_combos (HANYA Dukungan Manajemen), BUKAN
+        # generic_prog_combos/generic_out_combos — keduanya memuat K/L militer &
+        # EB-series yang komposisi akun L3-nya tetap valid untuk dibandingkan.
+        if (kl, prog, keg) in dm_prog_combos:
+            continue
         klshare = out_kl_share.get(out)
         tot = sum(cats.values())
         if not klshare or tot <= 0:
