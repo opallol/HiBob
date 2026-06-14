@@ -22,6 +22,8 @@ interface GNode {
   accent: string;
   data?: BubbleNode;
   count?: number;
+  cx?: number;   // pusat cluster yang dituju (untuk forceX/forceY member)
+  cy?: number;
   fx?: number;
   fy?: number;
   x?: number;
@@ -107,7 +109,10 @@ export default function BubbleCanvas({ nodes, mode, manifest, selectedId, focusN
       if (!groups.has(k)) groups.set(k, []);
       groups.get(k)!.push(n);
     }
-    const keys = [...groups.keys()].sort((a, b) => groups.get(b)!.length - groups.get(a)!.length);
+    // Urut by total pagu desc — SAMA dengan AnomalyList, agar warna accent anchor
+    // di peta cocok dengan warna cluster di daftar anomali (index → CLUSTER_ACCENT).
+    const paguOf = (k: string) => groups.get(k)!.reduce((s, n) => s + n.pagu, 0);
+    const keys = [...groups.keys()].sort((a, b) => paguOf(b) - paguOf(a));
 
     const cols = Math.ceil(Math.sqrt(keys.length));
     const spacing = 380;
@@ -125,21 +130,27 @@ export default function BubbleCanvas({ nodes, mode, manifest, selectedId, focusN
       const cy = row * spacing;
       const members = groups.get(k)!;
 
+      // Hub MENGAMBANG bebas (tanpa fx/fy): ditarik benang ke semua member,
+      // sehingga otomatis duduk di centroid = tengah cluster, berapa pun jumlahnya.
       gnodes.push({
         id: `__hub_${k}`,
         hub: true,
         cluster: k,
         label: clusterLabel(k, mode, manifest),
-        r: 7,
+        r: 6,
         color: accent,
         accent,
         count: members.length,
-        fx: cx,
-        fy: cy,
+        cx,
+        cy,
+        x: cx,
+        y: cy,
       });
 
-      members.forEach((n, j) => {
-        const ang = (j / members.length) * Math.PI * 2;
+      // Member di-init dekat pusat dengan sedikit acak → mekar (bloom) saat render.
+      members.forEach((n) => {
+        const ang = Math.random() * Math.PI * 2;
+        const rad = 6 + Math.random() * 26;
         gnodes.push({
           id: n.id,
           cluster: k,
@@ -148,8 +159,10 @@ export default function BubbleCanvas({ nodes, mode, manifest, selectedId, focusN
           color: VERDICT_COLOR[n.v],
           accent,
           data: n,
-          x: cx + Math.cos(ang) * 60,
-          y: cy + Math.sin(ang) * 60,
+          cx,
+          cy,
+          x: cx + Math.cos(ang) * rad,
+          y: cy + Math.sin(ang) * rad,
         });
         glinks.push({ source: n.id, target: `__hub_${k}`, accent });
       });
@@ -162,16 +175,22 @@ export default function BubbleCanvas({ nodes, mode, manifest, selectedId, focusN
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    fg.d3Force("link")?.distance((l: any) => (l.target.r ?? 7) + 30).strength(0.5);
-    fg.d3Force("charge")?.strength(-26).distanceMax(180);
-    const collide = fg.d3Force("collide");
-    if (!collide) {
-      // tambah collision agar bubble tidak tumpang tindih
-      import("d3-force").then(({ forceCollide }) => {
-        fgRef.current?.d3Force("collide", forceCollide((n: any) => n.r + 1.5).strength(0.85));
-        fgRef.current?.d3ReheatSimulation();
-      });
-    }
+    // center global dimatikan — tiap cluster di-anchor sendiri via forceX/forceY.
+    fg.d3Force("center", null);
+    // benang hub↔member: lemah & pendek; cukup untuk menyeret hub ke centroid,
+    // tidak mendominasi posisi member.
+    fg.d3Force("link")?.distance(24).strength(0.18);
+    // hanya member yang saling tolak; hub tak menolak agar bisa diam di tengah.
+    fg.d3Force("charge")?.strength((n: any) => (n.hub ? 0 : -22)).distanceMax(170);
+    import("d3-force").then(({ forceX, forceY, forceCollide }) => {
+      const fgr = fgRef.current;
+      if (!fgr) return;
+      // member ditarik lembut ke pusat cluster-nya; hub dibiarkan bebas (str 0).
+      fgr.d3Force("x", forceX((n: any) => n.cx ?? 0).strength((n: any) => (n.hub ? 0 : 0.09)));
+      fgr.d3Force("y", forceY((n: any) => n.cy ?? 0).strength((n: any) => (n.hub ? 0 : 0.09)));
+      fgr.d3Force("collide", forceCollide((n: any) => n.r + 1.6).strength(0.85));
+      fgr.d3ReheatSimulation();
+    });
     fg.d3ReheatSimulation?.();
   }, [graph]);
 
@@ -203,20 +222,56 @@ export default function BubbleCanvas({ nodes, mode, manifest, selectedId, focusN
           nodeLabel={(n: any) => nodeTooltip(n, manifest)}
           linkColor={(l: any) => `${l.accent}22`}
           linkWidth={0.6}
-          onNodeDragEnd={(n: any) => {
-            if (n.hub) {
-              // d3 clears fx/fy synchronously after this callback fires,
-              // so we re-pin AFTER d3 finishes via setTimeout
-              const x = n.x, y = n.y;
-              setTimeout(() => { n.fx = x; n.fy = y; }, 0);
-            }
-          }}
           onNodeClick={(n: any) => {
             if (!n.hub && n.data) onSelect(n.data);
             else if (n.hub && fgRef.current) {
-              fgRef.current.centerAt(n.fx, n.fy, 600);
+              fgRef.current.centerAt(n.x, n.y, 600);
               fgRef.current.zoom(2.2, 600);
             }
+          }}
+          onRenderFramePost={(ctx: CanvasRenderingContext2D, scale: number) => {
+            // Anchor cluster digambar SETELAH semua node → selalu di atas.
+            // Bentuk ⊙ (target) + label berwarna accent, di posisi hub (= tengah cluster).
+            ctx.save();
+            const fs = Math.max(7, 12 / scale);
+            ctx.font = `600 ${fs}px Inter, sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            for (const n of graph.nodes as any[]) {
+              if (!n.hub || typeof n.x !== "number") continue;
+              const x = n.x, y = n.y;
+
+              // --- bentuk ⊙ (ring + titik tengah) ---
+              const R = 6.5 / scale;
+              ctx.beginPath();
+              ctx.arc(x, y, R, 0, 2 * Math.PI);
+              ctx.fillStyle = "rgba(10,14,26,0.92)";
+              ctx.fill();
+              ctx.lineWidth = 1.7 / scale;
+              ctx.strokeStyle = n.accent;
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.arc(x, y, 2.4 / scale, 0, 2 * Math.PI);
+              ctx.fillStyle = n.accent;
+              ctx.fill();
+
+              // --- label berwarna accent, di bawah ⊙ ---
+              const name = n.label.length > 28 ? n.label.slice(0, 28) + "…" : n.label;
+              const lbl = `${name}  ·  ${n.count}`;
+              const ly = y + R + fs * 0.95;
+              const tw = ctx.measureText(lbl).width;
+              const pr = fs * 0.82;
+              const hw = tw / 2;
+              ctx.fillStyle = "rgba(6,10,20,0.82)";
+              ctx.beginPath();
+              ctx.arc(x - hw, ly, pr, Math.PI / 2, Math.PI * 1.5);
+              ctx.arc(x + hw, ly, pr, -Math.PI / 2, Math.PI / 2);
+              ctx.closePath();
+              ctx.fill();
+              ctx.fillStyle = n.accent;
+              ctx.fillText(lbl, x, ly);
+            }
+            ctx.restore();
           }}
           nodePointerAreaPaint={(n: any, color: string, ctx: CanvasRenderingContext2D) => {
             ctx.fillStyle = color;
@@ -226,27 +281,8 @@ export default function BubbleCanvas({ nodes, mode, manifest, selectedId, focusN
           }}
           nodeCanvasObject={(n: any, ctx: CanvasRenderingContext2D, scale: number) => {
             const selected = n.id === selectedId;
-            if (n.hub) {
-              ctx.beginPath();
-              ctx.arc(n.x, n.y, 7, 0, 2 * Math.PI);
-              ctx.fillStyle = "#0a0e1a";
-              ctx.fill();
-              ctx.lineWidth = 2 / scale;
-              ctx.strokeStyle = n.accent;
-              ctx.stroke();
-              ctx.beginPath();
-              ctx.arc(n.x, n.y, 2.5, 0, 2 * Math.PI);
-              ctx.fillStyle = n.accent;
-              ctx.fill();
-              const fs = Math.min(13, 11 / scale + 3);
-              ctx.font = `500 ${fs}px Inter, sans-serif`;
-              ctx.textAlign = "center";
-              ctx.textBaseline = "top";
-              ctx.fillStyle = "#aeb9d4";
-              const lbl = n.label.length > 30 ? n.label.slice(0, 30) + "…" : n.label;
-              ctx.fillText(`${lbl}  ·  ${n.count}`, n.x, n.y + 11);
-              return;
-            }
+            // Anchor (hub) digambar di onRenderFramePost (⊙ + label, selalu di atas).
+            if (n.hub) return;
             // --- bubble member: bola mengkilap (glow + radial gradient + highlight) ---
             const rgb = hexToRgb(n.color);
             const r = n.r;
