@@ -1060,7 +1060,7 @@ Contoh: K/L ini = {Modal: 95%, Barang: 5%}
 ```
 1.504.455 baris DIPA 2026
         │
-        ├─ Jalur 1 (Policy Alignment):    1.542 anomali dengan reasoning TreasurAI
+        ├─ Jalur 1 (Policy Alignment):    1.546 anomali dengan reasoning TreasurAI
         │    └─ policy_orphan: 0  │  weak_alignment: 1.546
         │
         ├─ Jalur 2 (Koherensi L1):       14.272 baris (di-aggregate ke output unik untuk tampilan)
