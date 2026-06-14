@@ -34,11 +34,47 @@ const PHASE_DESC: Record<string, string> = {
     "Anomali tidak dibiarkan jadi sekadar angka. Model AI internal Kemenkeu membaca konteks tugas dan mandat tiap kementerian, lalu memberi penjelasan naratif sekaligus vonis: benar anomali, perlu ditinjau, atau sebenarnya wajar. Seluruh proses ini berjalan di dalam jaringan Kemenkeu.",
 };
 
+// catatan singkat per langkah (key = teks langkah persis dari pipeline.json).
+// Langkah tanpa entri di sini tetap tampil, hanya tidak bisa di-expand.
+const STEP_DETAIL: Record<string, string> = {
+  "Ekstraksi 17 PDF RPJMN/RKP":
+    "PyMuPDF membaca layer teks digital tiap halaman (total 4.478 halaman) — bukan OCR gambar.",
+  "Chunking + AI OCR cleaning (dokumen publik)":
+    "Teks dipotong per unit hierarki, lalu DeepSeek merapikan salah-pindai tanpa mengubah angka/kode.",
+  "Ekstraksi node PN/PP/KP":
+    "962 entitas perencanaan: 43 Prioritas Nasional, 167 Program Prioritas, 753 Kegiatan Prioritas.",
+  "Bangun edge hierarki prioritas":
+    "856 relasi induk-anak PN→PP→KP agar pohon prioritas bisa ditelusuri.",
+  "e5-small lokal embed DIPA + knowledge graph":
+    "Tiap teks jadi vektor 384 dimensi via model fine-tune Bahasa Indonesia, dihitung di komputer lokal.",
+  "Vektor dihitung runtime, tak disimpan (privasi)":
+    "Vektor data DIPA tak pernah ditulis ke disk atau keluar jaringan — dihitung saat proses lalu dibuang.",
+  "Skor kemiripan semantik":
+    "Cosine similarity tiap baris DIPA ke Kegiatan Prioritas; anchor diprioritaskan ke mandat K/L tersebut.",
+  "Deteksi policy_orphan & weak_alignment":
+    "Item berkemiripan rendah ditandai, relatif terhadap distribusi seluruh data (ambang persentil).",
+  "L1/L2 semantik program-kegiatan-output":
+    "Cek konsistensi internal: nama kegiatan cocok dengan programnya, output cocok dengan kegiatannya.",
+  "L3 komposisi akun vs peer":
+    "Pola belanja akun dibanding rata-rata K/L lain beroutput sama, bobot tiap K/L setara (mean-of-shares).",
+  "oss120b enrich mandat RPJMN per K/L":
+    "Tiap prompt diberi konteks mandat RPJMN/RKP K/L agar penilaian berbasis tugas resmi, bukan tebakan umum.",
+  "Verdict + rekomendasi tiap anomali":
+    "Vonis (valid / false positive / perlu review) + rekomendasi, lalu di-parse jadi label terstruktur.",
+};
+
 export default function PipelineSection() {
   const [pipe, setPipe] = useState<Pipeline | null>(null);
+  const [open, setOpen] = useState<Set<string>>(new Set());
   useEffect(() => {
     loadPipeline().then(setPipe).catch(() => {});
   }, []);
+  const toggle = (id: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   if (!pipe) return <div className="p-10 text-slate-500">Memuat alur…</div>;
 
   return (
@@ -134,12 +170,35 @@ export default function PipelineSection() {
                   <p className="mt-2 text-[13px] leading-relaxed text-slate-400">{PHASE_DESC[ph.id]}</p>
                 )}
                 <ul className="mt-3 space-y-0.5 border-t border-ink-800/70 pt-2.5">
-                  {ph.steps.map((s) => (
-                    <li key={s} className="text-[12px] text-slate-500">
-                      <span className="text-ink-600 mr-1.5">›</span>
-                      {s}
-                    </li>
-                  ))}
+                  {ph.steps.map((s) => {
+                    const id = ph.id + "::" + s;
+                    const detail = STEP_DETAIL[s];
+                    const isOpen = open.has(id);
+                    return (
+                      <li key={s}>
+                        <button
+                          type="button"
+                          onClick={() => detail && toggle(id)}
+                          aria-expanded={detail ? isOpen : undefined}
+                          className={`flex w-full items-start gap-1.5 text-left text-[12px] text-slate-500 transition-colors ${
+                            detail ? "hover:text-slate-300" : "cursor-default"
+                          }`}
+                        >
+                          <span
+                            className={`mt-px text-ink-600 transition-transform ${isOpen ? "rotate-90 text-slate-400" : ""}`}
+                          >
+                            ›
+                          </span>
+                          <span className="flex-1">{s}</span>
+                        </button>
+                        {isOpen && detail && (
+                          <p className="ml-[18px] mb-1 mt-1 text-[11px] leading-relaxed text-slate-500/85">
+                            {detail}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             </motion.div>
