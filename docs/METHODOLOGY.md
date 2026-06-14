@@ -14,7 +14,7 @@ Sebelum masuk ke fase-fase teknis, hal paling fundamental yang perlu dipahami ad
 |-------|-------|----------------|--------|
 | **DeepSeek Chat** | API Eksternal (Cloud) | Dokumen PDF publik | RPJMN/RKP adalah dokumen publik yang sudah dipublikasikan pemerintah. Aman dikirim ke API eksternal. |
 | **LazarusNLP/all-indo-e5-small** | Model Lokal (On-premise) | Data anggaran DIPA | Data DIPA per K/L bersifat internal pemerintah. Model dijalankan lokal — **tidak ada data yang meninggalkan server**. |
-| **TreasurAI OSS 120B** | API Internal Kemenkeu | Reasoning **semua** anomali keselarasan (1 orphan + 1,541 weak) dan anomali koherensi L3 (19,235 baris) | Data DIPA yang sudah dianalisis dikirim ke sistem internal Kemenkeu. Tidak keluar jaringan. |
+| **TreasurAI OSS 120B** | API Internal Kemenkeu | Reasoning **semua** anomali keselarasan (0 orphan + 1.546 weak) dan anomali koherensi L3 (19,235 baris) | Data DIPA yang sudah dianalisis dikirim ke sistem internal Kemenkeu. Tidak keluar jaringan. |
 
 **Prinsip dasar:** Data yang lebih sensitif ditangani oleh infrastruktur yang lebih tertutup. Dokumen kebijakan publik → cloud. Data anggaran K/L → lokal. Analisis kualitatif anggaran → jaringan internal Kemenkeu.
 
@@ -85,20 +85,22 @@ Jika tahun depan semua item DIPA kebetulan mendapat skor lebih tinggi karena nom
 
 ### 4. Satu-satunya Nilai Absolut: Safety Net untuk Policy Orphan
 
-Satu pengecualian terhadap pendekatan relatif di atas: **ABS_FLOOR = 45.0** untuk klasifikasi `policy_orphan`.
+Satu pengecualian terhadap pendekatan relatif di atas: **ABS_FLOOR = 40.0** untuk klasifikasi `policy_orphan`.
 
-Tanpa floor ini, item yang punya rank sangat rendah tapi skor 45–50 (masih ada relevansi, hanya nomenklatur jauh berbeda) akan salah diklasifikasikan sebagai "orphan total". Verifikasi manual menemukan bahwa item semacam ini bukan tanpa hubungan — hanya bahasa DIPA-nya jauh dari bahasa RPJMN.
+Tanpa floor ini, item yang punya rank sangat rendah tapi skornya masih menunjukkan relevansi (hanya nomenklatur jauh berbeda) akan salah diklasifikasikan sebagai "orphan total". Verifikasi menemukan bahwa item semacam ini bukan tanpa hubungan — hanya bahasa DIPA-nya jauh dari bahasa RPJMN.
 
 ```python
-# Dual condition: rendah RELATIF (rank < P15) DAN rendah ABSOLUT (skor < 45)
-if rank < P15 AND best_score < 45.0:
+# Dual condition: rendah RELATIF (rank < P15) DAN rendah ABSOLUT (skor < 40)
+if rank < P15 AND best_score < 40.0:
     → policy_orphan   # benar-benar tidak ada KP RPJMN/RKP yang relevan
 
-if rank < P15 AND best_score >= 45.0:
+if rank < P15 AND best_score >= 40.0:
     → weak_alignment  # ada relevansi, tapi nomenklatur sangat berbeda
 ```
 
 Contoh: *"Wajib Belajar 13 Tahun"* (Kemendikdasmen) mendapat rank P12 tapi skor 47 — artinya ada relevansi semantik, hanya istilahnya tidak muncul persis di RPJMN. Ini `weak_alignment`, bukan `orphan`.
+
+> **Catatan audit (2026-06-14):** floor diturunkan dari 45 → 40 setelah audit menemukan satu-satunya kandidat orphan tersisa (skor 44,47, item terendah di dataset) ternyata masih dalam domain K/L-nya. Hasil 2026: **0 policy_orphan** — tidak ada belanja yang sepenuhnya di luar prioritas nasional.
 
 ---
 
@@ -150,7 +152,7 @@ verdict: "false_positive" (sesuai RPJMN) / "valid" / "manual_review"
           │   [ddac_anomaly_2026: status keselarasan per output DIPA]
           │         │
           │         └─▶ TreasurAI OSS 120B + kl_context.py (jaringan Kemenkeu)
-          │             [llm_reasoning: 1 orphan + 1,541 weak = 1,542 item]
+          │             [llm_reasoning: 0 orphan + 1.546 weak = 1.546 item]
           │
           └─▶ LazarusNLP e5-small (lokal) → 3-level coherence
               [ddac_coherence_2026: 1.504.455 baris skor koherensi]
@@ -214,13 +216,13 @@ Setelah seluruh pipeline berjalan, berikut yang dihasilkan dari 1.504.455 baris 
 
 | Jalur Analisis | Cakupan | Anomali Ditemukan | Pagu Terindikasi |
 |---------------|---------|-------------------|-----------------|
-| **Keselarasan RPJMN/RKP** | 7.235 unique alignment texts | 1.542 (1 orphan + 1.541 weak) | Rp 152,06 T |
+| **Keselarasan RPJMN/RKP** | 7.235 unique alignment texts | 1.546 (0 orphan + 1.546 weak) | Rp 152,1 T |
 | **Koherensi L3 — Peer Akun** | 7.228 output unik | ~276 output berdeviasi | Rp 368,6 T |
 | **Koherensi L1 — Program↔Kegiatan** | 2.716 pasang unik | 14.272 baris flagged | — |
 | **Koherensi L2 — Kegiatan↔Output** | 2.895 pasang unik | 16.310 baris flagged | — |
 
 **Yang di-reasoning oleh TreasurAI OSS 120B:**
-- 1.542 item keselarasan (100% dari anomali keselarasan)
+- 1.546 item keselarasan (100% dari anomali keselarasan)
 - 19.235 baris koherensi L3 top-pagu (30 output unik dengan pagu tertinggi)
 
 ---
@@ -661,7 +663,7 @@ else:            aligned_status = "none"  # kandidat orphan
 # Dual condition untuk policy_orphan (mencegah false positive)
 if nature in ("routine_support", "treasury_crosscutting"):
     anomaly_type = "routine"
-elif aligned_status == "none" and best_score < 45.0:  # ABS_FLOOR
+elif aligned_status == "none" and best_score < 40.0:  # ABS_FLOOR
     anomaly_type = "policy_orphan"   # rendah RELATIF dan ABSOLUT
 elif aligned_status in ("none", "weak"):
     anomaly_type = "weak_alignment"  # rendah relatif, masih masuk akal
@@ -669,8 +671,8 @@ else:
     anomaly_type = "aligned"
 ```
 
-**Alasan ABS_FLOOR = 45.0:**
-Verifikasi menunjukkan bahwa item dengan rank rendah tapi skor 45–50 adalah kasus *mismatch nomenklatur*, bukan ketiadaan relevansi. Contoh: *"Wajib Belajar 13 Tahun"* (Kemendikdasmen) mendapat skor 47 ke KP Pendidikan — ini jelas terkait pendidikan, hanya nomenklatur DIPA-nya berbeda dari nama KP di RPJMN. Menurunkan floor ke 45.0 membuat sistem tidak salah mengklasifikasikannya sebagai orphan.
+**Alasan ABS_FLOOR = 40.0:**
+Verifikasi menunjukkan bahwa item dengan rank rendah tapi skor masih di kisaran 40-an adalah kasus *mismatch nomenklatur*, bukan ketiadaan relevansi. Contoh: *"Wajib Belajar 13 Tahun"* (Kemendikdasmen) mendapat skor 47 ke KP Pendidikan — jelas terkait pendidikan, hanya nomenklatur DIPA-nya berbeda. Audit 2026-06-14 menurunkan floor 45 → 40 setelah kandidat orphan terakhir (ESDM Mineral & Batubara, skor 44,47) terbukti masih dalam domain energi ESDM. Hasilnya **0 policy_orphan** di 2026.
 
 **Review Priority Score:**
 ```python
@@ -682,8 +684,8 @@ Item dengan pagu besar DAN skor rendah diprioritaskan untuk review manusia.
 
 **Output DB:**
 - `ddac_anomaly_2026` — satu baris per unique `alignment_text`
-  - **1** `policy_orphan`
-  - **1.541** `weak_alignment`
+  - **0** `policy_orphan` (2026; pasca-audit floor 40)
+  - **1.546** `weak_alignment`
   - Sisanya: `strong/moderate/routine`
 - Kolom: `aligned_status`, `alignment_score`, `anomaly_type`, `anomaly_score`, `review_priority`, `top3_matches` (JSON: kode + nama + skor 3 KP terdekat), `spending_nature`
 
@@ -760,7 +762,7 @@ di atas, apakah ada penjelasan mengapa similaritynya rendah?
 - `ddac_anomaly_2026.llm_model` — `'oss120b'`
 - `ddac_anomaly_2026.treasurai_verdict` — `valid` / `false_positive` / `manual_review`
 - `ddac_anomaly_2026.review_status` — `confirmed` / `dismissed` / `needs_review` / `pending`
-- **1,542 item** memiliki reasoning (1 orphan + 1,541 weak_alignment, oss120b)
+- **1.546 item** memiliki reasoning (0 orphan + 1.546 weak_alignment, oss120b)
 
 #### Script 15 — Coherence L3 Reasoning
 
@@ -1003,12 +1005,12 @@ Bayangkan sistem ini seperti seorang auditor berpengalaman yang memeriksa lapora
 
 | Jenis Anomali | Kriteria Teknis | Artinya | Jumlah (2026) |
 |--------------|----------------|---------|--------------|
-| `policy_orphan` | rank < P15 **DAN** skor absolut < 45 | Tidak ada KP RPJMN/RKP yang semantik relevan. Belanja ini tidak bisa dikaitkan ke prioritas nasional manapun. | 1 item |
-| `weak_alignment` | rank < P15 **ATAU** (rank < P50 dengan indikasi lemah) | Ada KP yang paling dekat, tapi keterkaitan semantiknya lemah. Bisa berarti nomenklatur berbeda, bisa berarti memang melenceng. | 1.541 item |
+| `policy_orphan` | rank < P15 **DAN** skor absolut < 40 | Tidak ada KP RPJMN/RKP yang semantik relevan. Belanja ini tidak bisa dikaitkan ke prioritas nasional manapun. | 0 item (2026) |
+| `weak_alignment` | rank < P15 **ATAU** (rank < P50 dengan indikasi lemah) | Ada KP yang paling dekat, tapi keterkaitan semantiknya lemah. Bisa berarti nomenklatur berbeda, bisa berarti memang melenceng. | 1.546 item |
 | `routine` | kode output EB-series (internal) atau K/L 999 (BAUN) | Belanja administratif/rutin atau lintas K/L — bukan sasaran analisis keselarasan kebijakan. | Dieksklusikan |
 | `aligned` | rank ≥ P15 | Keselarasan cukup — tidak masuk radar anomali Jalur 1. | Mayoritas |
 
-**Catatan penting:** 1.542 item anomali (1 orphan + 1.541 weak) **semuanya** sudah di-reasoning oleh TreasurAI OSS 120B — dengan konteks mandat K/L dari RPJMN/RKP — sehingga setiap item memiliki `treasurai_verdict`: `valid` / `false_positive` / `manual_review`.
+**Catatan penting:** 1.546 item anomali (0 orphan + 1.546 weak) **semuanya** sudah di-reasoning oleh TreasurAI OSS 120B — dengan konteks mandat K/L dari RPJMN/RKP — sehingga setiap item memiliki `treasurai_verdict`: `valid` / `false_positive` / `manual_review`.
 
 ---
 
@@ -1059,7 +1061,7 @@ Contoh: K/L ini = {Modal: 95%, Barang: 5%}
 1.504.455 baris DIPA 2026
         │
         ├─ Jalur 1 (Policy Alignment):    1.542 anomali dengan reasoning TreasurAI
-        │    └─ policy_orphan: 1  │  weak_alignment: 1.541
+        │    └─ policy_orphan: 0  │  weak_alignment: 1.546
         │
         ├─ Jalur 2 (Koherensi L1):       14.272 baris (di-aggregate ke output unik untuk tampilan)
         │
@@ -1070,7 +1072,7 @@ Contoh: K/L ini = {Modal: 95%, Barang: 5%}
 ```
 
 **Yang ditampilkan di SENTINEL (peta anomali interaktif):**
-- Tab "Keselarasan RPJMN/RKP": 1.542 item Jalur 1 yang sudah ada reasoning-nya
+- Tab "Keselarasan RPJMN/RKP": 1.546 item Jalur 1 yang sudah ada reasoning-nya
 - Tab "Koherensi Akun" → L3: ~276 kombinasi unik L3 (Rp 368,6 T)
 - Tab "Koherensi Akun" → L1/L2 Semantik: 332 kombinasi unik L1/L2 (Rp 4 T)
 
@@ -1142,7 +1144,7 @@ Contoh temuan valid yang dapat dipertanggungjawabkan: output "Prasarana" dengan 
 |---|-------|------|-------|-------------------|
 | 1 | **DeepSeek Chat** (cloud) | 3, 7 | OCR correction + K/L parsing | Dokumen publik (RPJMN, RKP) |
 | 2 | **LazarusNLP e5-small** (lokal) | 9, 12 | Semantic embedding + cosine similarity | Data DIPA internal (tidak keluar server) |
-| 3 | **TreasurAI OSS 120B** (internal Kemenkeu) | 10 | Reasoning kualitatif **semua** anomali keselarasan (1,542 item) + koherensi L3 (19,235 baris); di-grounding ke RPJMN/RKP via kl_context.py | Data DIPA + hasil analisis (jaringan Kemenkeu) |
+| 3 | **TreasurAI OSS 120B** (internal Kemenkeu) | 10 | Reasoning kualitatif **semua** anomali keselarasan (1.546 item) + koherensi L3 (19,235 baris); di-grounding ke RPJMN/RKP via kl_context.py | Data DIPA + hasil analisis (jaringan Kemenkeu) |
 
 **Prinsip akhir:** Sistem ini bukan "satu AI yang memutuskan segalanya" — melainkan pipeline bertahap di mana setiap komponen melakukan apa yang paling ia kuasai: LLM cloud untuk pembersihan teks publik, model embedding lokal untuk analisis kuantitatif data sensitif, LLM internal untuk judgment kualitatif. Hasilnya adalah analisis yang dapat diaudit, transparan, dan aman dari perspektif keamanan data pemerintah.
 
@@ -1158,6 +1160,6 @@ Contoh temuan valid yang dapat dipertanggungjawabkan: output "Prasarana" dengan 
 | `deepseek_policy_nodes` | Script 04/14 | 963 | Node PN/PP/KP knowledge graph |
 | `deepseek_policy_edges` | Script 05 | 857 | Relasi hierarki |
 | `deepseek_policy_kl_assignments` | Script 08 | 604 | Penugasan K/L per KP |
-| `ddac_anomaly_2026` | Script 10/11 | 7.235 | Keselarasan DIPA vs RPJMN/RKP; 1,542 item dengan reasoning TreasurAI oss120b |
+| `ddac_anomaly_2026` | Script 10/11 | 7.235 | Keselarasan DIPA vs RPJMN/RKP; 1.546 item dengan reasoning TreasurAI oss120b |
 | `ddac_coherence_2026` | Script 12/13/15 | 1.504.455 | Koherensi internal 3 level; 19,235 baris dengan reasoning TreasurAI oss120b |
 | `ddac_coherence_akun_2026` | Script 13 | ~8.000 | Detail peer komposisi akun L3 |
