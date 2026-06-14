@@ -18,3 +18,5 @@ output/
 logs_*.txt
 rerun_done.flag
 rerun_fix_done.flag
+rerun_coh_done.flag
+rerun_coh2_done.flag

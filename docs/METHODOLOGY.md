@@ -215,7 +215,7 @@ Setelah seluruh pipeline berjalan, berikut yang dihasilkan dari 1.504.455 baris 
 | Jalur Analisis | Cakupan | Anomali Ditemukan | Pagu Terindikasi |
 |---------------|---------|-------------------|-----------------|
 | **Keselarasan RPJMN/RKP** | 7.235 unique alignment texts | 1.542 (1 orphan + 1.541 weak) | Rp 152,06 T |
-| **Koherensi L3 — Peer Akun** | 7.228 output unik | ~1.101 output berdeviasi | Rp 520 T |
+| **Koherensi L3 — Peer Akun** | 7.228 output unik | ~276 output berdeviasi | Rp 368,6 T |
 | **Koherensi L1 — Program↔Kegiatan** | 2.716 pasang unik | 14.272 baris flagged | — |
 | **Koherensi L2 — Kegiatan↔Output** | 2.895 pasang unik | 16.310 baris flagged | — |
 
@@ -965,7 +965,7 @@ if peer_count < 5:
 - `ddac_coherence_akun_2026` → ~8.000 baris per (K/L, program, kegiatan, output)
 - Kolom `akun_detail` (JSON): distribusi akun own vs peer, top unexpected account, peer_count
 
-**142.384 baris** tertandai `level3_akun_tidak_lazim`.
+**24.224 baris** tertandai `level3_akun_tidak_lazim` (peer berbasis *mean-of-shares*; program Dukungan Manajemen dikecualikan).
 
 ---
 
@@ -1049,7 +1049,7 @@ Contoh: K/L ini = {Modal: 95%, Barang: 5%}
 | Output internal (EB-series) | ≥ 0,65 | EB-series (EBA/EBB/EBC/EBD) secara alami lebih bervariasi antar K/L karena bersifat dukungan internal yang berbeda konteks organisasi. |
 | < 5 peer K/L | Tidak di-flag | Tidak cukup K/L lain untuk membentuk profil norma yang representatif. |
 
-**Anomali L3 yang ditemukan (2026):** 142.384 baris; diringkas ke ~1.101 kombinasi unik (K/L, program, kegiatan, output) yang punya deviasi signifikan.
+**Anomali L3 yang ditemukan (2026):** 24.224 baris; diringkas ke ~276 kombinasi unik (K/L, program, kegiatan, output) yang punya deviasi signifikan.
 
 ---
 
@@ -1065,14 +1065,14 @@ Contoh: K/L ini = {Modal: 95%, Barang: 5%}
         │
         ├─ Jalur 2 (Koherensi L2):       16.310 baris (di-aggregate ke output unik untuk tampilan)
         │
-        └─ Jalur 3 (Koherensi L3):      142.384 baris → ~1.101 output unik dengan TVD tinggi
+        └─ Jalur 3 (Koherensi L3):       24.224 baris → ~276 output unik dengan TVD tinggi
                                           (19.235 baris top-pagu dengan reasoning TreasurAI)
 ```
 
 **Yang ditampilkan di SENTINEL (peta anomali interaktif):**
 - Tab "Keselarasan RPJMN/RKP": 1.542 item Jalur 1 yang sudah ada reasoning-nya
-- Tab "Koherensi Akun" → L3: ~1.101 kombinasi unik L3 (Rp 520 T)
-- Tab "Koherensi Akun" → L1/L2 Semantik: 325 kombinasi unik L1/L2 (Rp 4 T)
+- Tab "Koherensi Akun" → L3: ~276 kombinasi unik L3 (Rp 368,6 T)
+- Tab "Koherensi Akun" → L1/L2 Semantik: 332 kombinasi unik L1/L2 (Rp 4 T)
 
 ---
 
@@ -1106,6 +1106,10 @@ Prinsip **konservatif** diterapkan: bila ragu antara *valid* dan *false_positive
 
 6. **Re-run penuh.** Setelah seluruh perbaikan, reasoning di-generate ulang sepenuhnya via TreasurAI oss120b (paralel) agar konsisten dengan prompt, parser, dan data mandat yang sudah dikoreksi.
 
+7. **Peer L3 = mean-of-shares (bukan pooled pagu).** Audit lanjutan atas perhitungan menemukan L3 (komposisi akun) memakai peer ter-*pool* berbobot pagu, sehingga satu K/L ber-pagu raksasa mendefinisikan "norma" dan memunculkan anomali palsu. Contoh: output QMA — K/L 083 belanja Rp1,7T (100% modal) menutupi 28 K/L lain yang mayoritas barang, membuat K/L 018 (sama seperti mayoritas peer) ter-flag deviasi 79,6%. Implementasi juga bertentangan dengan metode terdokumentasi. Diperbaiki ke rata-rata share per-K/L (bobot sama). Terbukti ~17% temuan L3 lama palsu (1.101 → 929 output).
+
+8. **L3 kecualikan program Dukungan Manajemen.** 52% verdict "valid" koherensi ternyata berasal dari "Program Dukungan Manajemen" (program administratif catch-all tiap K/L). Komposisi akun overhead bervariasi wajar dan bukan sinyal kebijakan substantif. Dikecualikan dari L3 (konsisten dengan L1/L2), namun K/L militer & output EB-series tetap dievaluasi karena komposisi akun-nya valid dibandingkan. L3 turun 929 → 276 output; temuan substantif (mis. program Makan Bergizi) tetap terjaga.
+
 > Semua reasoning tetap menggunakan **TreasurAI OSS 120B**. Tidak ada model lain yang digunakan untuk penalaran.
 
 ### Hasil verdict akhir (pasca-koreksi)
@@ -1120,13 +1124,13 @@ Prinsip **konservatif** diterapkan: bila ragu antara *valid* dan *false_positive
 
 Interpretasi: setelah pencocokan sadar-mandat dan penilaian konservatif, tidak ada belanja yang benar-benar di luar prioritas nasional — skor kemiripan rendah hampir seluruhnya akibat perbedaan nomenklatur DIPA vs RPJMN atau karena belanja berupa mekanisme pembiayaan. Temuan substantif justru muncul di analisis koherensi.
 
-**Koherensi Akun** (output unik yang ditampilkan: 1.101 L3 + 325 L1/L2):
+**Koherensi Akun** (output unik yang ditampilkan: 276 L3 + 332 L1/L2 = 608 node):
 
 | Verdict | Output |
 |---------|--------|
-| valid (deviasi tak terjustifikasi — perlu tindak lanjut) | 574 |
-| false_positive (deviasi terjustifikasi mandat/sifat program) | 600 |
-| manual_review | 252 |
+| valid (deviasi tak terjustifikasi — perlu tindak lanjut) | 178 |
+| false_positive (deviasi terjustifikasi mandat/sifat program) | 340 |
+| manual_review | 90 |
 
 Contoh temuan valid yang dapat dipertanggungjawabkan: output "Prasarana" dengan 100% belanja barang padahal peer ~95% belanja modal; komposisi belanja pegawai dominan pada program peningkatan kompetensi yang lazimnya belanja barang. Setiap verdict valid disertai rekomendasi verifikasi (mis. minta dokumen pendukung), bukan asersi pelanggaran.
 
