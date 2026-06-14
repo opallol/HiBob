@@ -24,9 +24,9 @@ const SEM_PAT = new Set(["l1", "l2", "l1l2"]);
 type CohFilter = "all" | "l3" | "sem";
 
 const COH_FILTERS: { key: CohFilter; label: string }[] = [
-  { key: "all", label: "Semua" },
-  { key: "l3",  label: "L3 Komposisi Akun" },
   { key: "sem", label: "L1/L2 Semantik" },
+  { key: "l3",  label: "L3 Komposisi Akun" },
+  { key: "all", label: "Semua" },
 ];
 
 export default function Explorer({ manifest, nodes, embed, onDatasetChange }: Props) {
