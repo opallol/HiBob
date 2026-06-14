@@ -1,8 +1,8 @@
-import type { Manifest } from "../types";
 import { VERDICT_COLOR, VERDICT_LABEL, VERDICT_ORDER } from "../theme";
 
-export default function Legend({ manifest }: { manifest: Manifest }) {
-  const counts = manifest.totals.verdict;
+// counts dihitung dari node yang BENAR-BENAR ditampilkan (sadar tab + filter),
+// bukan dari manifest statis — agar angka selalu cocok dengan peta.
+export default function Legend({ counts }: { counts: Record<string, number> }) {
   return (
     <div className="absolute bottom-4 left-4 z-20 rounded-xl border border-ink-700 bg-ink-900/85 backdrop-blur px-3.5 py-2.5 shadow-lg">
       <div className="text-[10px] uppercase tracking-wider text-ink-600 mb-1.5">status anomali</div>

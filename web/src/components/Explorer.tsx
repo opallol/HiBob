@@ -49,6 +49,14 @@ export default function Explorer({ manifest, nodes, embed, onDatasetChange }: Pr
   const activeNodes = dataset === "coherence" ? cohNodes : (alignNodes ?? []);
   const activeModes = dataset === "coherence" ? undefined : ALIGN_MODES;
 
+  // Hitung verdict dari node yang sedang ditampilkan agar Legend selalu sinkron
+  // dengan tab + sub-filter aktif (bukan angka statis manifest).
+  const verdictCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const n of activeNodes) c[n.v] = (c[n.v] ?? 0) + 1;
+    return c;
+  }, [activeNodes]);
+
   // Lazy-load alignment nodes saat pertama kali tab dipilih
   useEffect(() => {
     if (dataset === "alignment" && !alignNodes && !alignErr) {
@@ -165,7 +173,7 @@ export default function Explorer({ manifest, nodes, embed, onDatasetChange }: Pr
             manifest={manifest}
             onClose={() => { setSelectedId(null); setDetail(null); }}
           />
-          <Legend manifest={manifest} />
+          <Legend counts={verdictCounts} />
           <BubbleCanvas
             nodes={activeNodes}
             mode={mode}
