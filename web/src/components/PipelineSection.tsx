@@ -56,6 +56,35 @@ export default function PipelineSection() {
         </p>
       </motion.div>
 
+      {/* Sumber data anggaran */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.4 }}
+        className="mb-8 rounded-xl border border-ink-800 bg-ink-900/60 p-5"
+      >
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-[14px] font-medium text-slate-100">Sumber Data Anggaran</h3>
+          <span className="text-[12px] tabular-nums text-emerald-400/90">
+            {(pipe.counts.dipa_lines ?? 0).toLocaleString("id-ID")} baris · Rp 3.559,7 T
+          </span>
+        </div>
+        <p className="mt-2 text-[12px] leading-relaxed text-slate-400">
+          Data anggaran menggunakan dataset <span className="text-slate-200">DIPA</span> dikombinasikan
+          dengan data <span className="text-slate-200">RKA K/L SINTESA Juni 2026</span>, dirinci hingga
+          level akun belanja.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {["K/L", "Program", "Kegiatan", "Output/KRO", "Komponen", "Akun"].map((lv, i, arr) => (
+            <span key={lv} className="flex items-center gap-1.5">
+              <span className="rounded-md bg-ink-800 px-2 py-0.5 text-[11px] text-slate-300">{lv}</span>
+              {i < arr.length - 1 && <span className="text-[11px] text-ink-600">→</span>}
+            </span>
+          ))}
+        </div>
+      </motion.div>
+
       <div className="mb-12 grid grid-cols-1 gap-3 sm:grid-cols-3">
         {MODELS.map((m, i) => (
           <motion.div
