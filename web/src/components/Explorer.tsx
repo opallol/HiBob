@@ -188,6 +188,18 @@ export default function Explorer({ manifest, nodes, embed, onDatasetChange }: Pr
           onSelect={(n) => select(n, true)}
         />
       </div>
+
+      {/* Footnote sumber data anggaran */}
+      {!embed && (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 border-t border-ink-800 bg-ink-950 px-3 py-1 text-[10px] text-ink-600">
+          <span className="text-ink-500">Sumber data anggaran:</span>
+          <span className="text-slate-400">DIPA + RKA K/L SINTESA Juni 2026</span>
+          <span>·</span>
+          <span className="tabular-nums">1.504.455 baris · Rp 3.559,7 T</span>
+          <span>·</span>
+          <span>dirinci hingga level akun (K/L → Program → Kegiatan → Output/KRO → Komponen → Akun)</span>
+        </div>
+      )}
     </div>
   );
 }
