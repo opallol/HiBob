@@ -1076,6 +1076,62 @@ Contoh: K/L ini = {Modal: 95%, Barang: 5%}
 
 ---
 
+## Kontrol Kualitas & Koreksi Audit (Juni 2026)
+
+Sebelum publikasi, seluruh hasil reasoning di-audit dari hilir (verdict akhir) ke hulu (KB, embedding) untuk memastikan setiap verdict dapat dipertanggungjawabkan. Audit menemukan dan memperbaiki enam akar masalah berikut.
+
+### Taksonomi Verdict (diperjelas)
+
+Setiap anomali yang di-reasoning TreasurAI diberi satu verdict dengan definisi tegas:
+
+| Verdict | Arti | Tindak lanjut |
+|---------|------|---------------|
+| **valid** | Temuan benar — belanja/pola benar-benar di luar prioritas nasional & domain K/L, atau deviasi tak dapat dijustifikasi | Perlu ditindaklanjuti |
+| **false_positive** | Deviasi/skor rendah nyata, tetapi DAPAT dijustifikasi (beda nomenklatur, mekanisme pembiayaan, mandat khusus, sifat program) | Bukan masalah |
+| **manual_review** | Bukti tidak cukup untuk memutuskan, atau mandat tampak tidak lengkap | Diserahkan ke penilai manusia |
+
+Prinsip **konservatif** diterapkan: bila ragu antara *valid* dan *false_positive*, sistem memilih *manual_review* — menghindari tuduhan keliru terhadap K/L pada output yang dipublikasikan.
+
+### Enam koreksi
+
+1. **Parsing verdict (D1).** Logika lama mengecek frasa "false positive" sebelum "perlu review manual" sehingga 69 item ter-mislabel ketika reasoning menyebut keduanya. Parser ditulis ulang: utamakan tag eksplisit `VERDICT: <label>` yang kini diminta di prompt, dengan fallback pola kalimat klasifikasi dan pembuangan klausa negasi.
+
+2. **Rekonsiliasi mandat K/L (D6).** RPJMN Lampiran III memakai penomoran K/L internal yang berbeda dari kode `kddept` DIPA, sehingga 184 dari 604 penugasan (28%) salah kode (mis. BNPT, Kejaksaan, Kemenperin teratribusi ke kode keliru). Dibangun rekonsiliasi deterministik (`scripts/18_reconcile_kl_assignments.py`) yang mencocokkan nama K/L pada teks bukti ke referensi kanonik DIPA. Hasilnya konteks mandat yang di-inject ke reasoning kini benar.
+
+3. **Pencocokan sadar-mandat (D4).** `best_match` lama adalah argmax global atas seluruh 753 KP tanpa memandang mandat, sehingga muncul anchor absurd (mis. program Jaminan Kesehatan ter-match ke KP "Sumber Daya Hayati/biodiversitas" karena tumpang-tindih kata "Sumber Daya"). Ditambahkan *mandate-aware anchoring*: prioritaskan KP yang memang ditugaskan ke K/L tersebut. Klasifikasi tetap memakai skor global (konservatif, distribusi stabil); anchor & konteks reasoning kini berbasis mandat.
+
+4. **Prompt & framing (D2/D3).** Prompt lama menjuruskan ("jelaskan kenapa alignment rendah") dan memakai istilah "anomali valid" yang ambigu, membuat model menandai deviasi yang justru sesuai mandat sebagai "valid". Prompt ditulis ulang: dipimpin oleh mandat K/L (bukan best-match yang bisa keliru), pertanyaan netral, taksonomi tegas, wajib mengakhiri dengan tag `VERDICT`.
+
+5. **Catatan reorganisasi.** Lampiran III RPJMN ditulis sebelum reorganisasi kementerian Oktober 2024. Sebagian K/L baru hasil pemekaran (mis. Kementerian Pendidikan Dasar dan Menengah, Pendidikan Tinggi, Imigrasi dan Pemasyarakatan) mewarisi tugas yang di RPJMN masih tercatat pada kementerian lama. Prompt diberi tahu hal ini sehingga tidak menyimpulkan "valid" hanya karena suatu belanja tak tercantum di daftar mandat yang mungkin belum lengkap.
+
+6. **Re-run penuh.** Setelah seluruh perbaikan, reasoning di-generate ulang sepenuhnya via TreasurAI oss120b (paralel) agar konsisten dengan prompt, parser, dan data mandat yang sudah dikoreksi.
+
+> Semua reasoning tetap menggunakan **TreasurAI OSS 120B**. Tidak ada model lain yang digunakan untuk penalaran.
+
+### Hasil verdict akhir (pasca-koreksi)
+
+**Keselarasan RPJMN/RKP** (1.546 item weak_alignment + policy_orphan):
+
+| Verdict | Item | Pagu |
+|---------|------|------|
+| false_positive (terjelaskan oleh mandat/nomenklatur) | 1.498 | Rp 151,9 T |
+| manual_review (perlu cek manusia) | 48 | Rp 0,2 T |
+| valid (orphan sejati) | 0 | — |
+
+Interpretasi: setelah pencocokan sadar-mandat dan penilaian konservatif, tidak ada belanja yang benar-benar di luar prioritas nasional — skor kemiripan rendah hampir seluruhnya akibat perbedaan nomenklatur DIPA vs RPJMN atau karena belanja berupa mekanisme pembiayaan. Temuan substantif justru muncul di analisis koherensi.
+
+**Koherensi Akun** (output unik yang ditampilkan: 1.101 L3 + 325 L1/L2):
+
+| Verdict | Output |
+|---------|--------|
+| valid (deviasi tak terjustifikasi — perlu tindak lanjut) | 574 |
+| false_positive (deviasi terjustifikasi mandat/sifat program) | 600 |
+| manual_review | 252 |
+
+Contoh temuan valid yang dapat dipertanggungjawabkan: output "Prasarana" dengan 100% belanja barang padahal peer ~95% belanja modal; komposisi belanja pegawai dominan pada program peningkatan kompetensi yang lazimnya belanja barang. Setiap verdict valid disertai rekomendasi verifikasi (mis. minta dokumen pendukung), bukan asersi pelanggaran.
+
+---
+
 ## Ringkasan: Tiga Model, Tiga Peran, Satu Tujuan
 
 | # | Model | Fase | Peran | Data yang Diproses |

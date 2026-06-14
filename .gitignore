@@ -17,3 +17,4 @@ output/
 # audit re-run artifacts
 logs_*.txt
 rerun_done.flag
+rerun_fix_done.flag

@@ -29,7 +29,7 @@ MODEL   = "oss120b"
 URL     = TREASURAI_BASE_URL + TREASURAI_MODELS[MODEL]
 KEY     = TREASURAI_API_KEY
 HDR     = {"Content-Type": "application/json", "X-API-Key": KEY}
-MAXTOK  = 450
+MAXTOK  = 750   # cukup untuk 4 kalimat + tag VERDICT (450 sempat memotong tag)
 
 T_ANOMALY, T_PAGU = TABLE_ANOMALY, TABLE_PAGU_AKUN
 T_COH, T_COH_AKUN = TABLE_COHERENCE, TABLE_COHERENCE_AKUN
