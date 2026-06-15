@@ -31,7 +31,7 @@ const COH_FILTERS: { key: CohFilter; label: string }[] = [
 
 export default function Explorer({ manifest, nodes, embed, onDatasetChange }: Props) {
   const [dataset, setDataset]       = useState<"coherence" | "alignment">("alignment");
-  const [cohFilter, setCohFilter]   = useState<CohFilter>("all");
+  const [cohFilter, setCohFilter]   = useState<CohFilter>("sem"); // default L1/L2 Semantik
   const [alignNodes, setAlignNodes] = useState<BubbleNode[] | null>(null);
   const [alignErr, setAlignErr]     = useState<string | null>(null);
 
