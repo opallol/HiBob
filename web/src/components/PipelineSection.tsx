@@ -206,6 +206,59 @@ export default function PipelineSection() {
         </div>
       </div>
 
+      {/* Kontrol kualitas & audit */}
+      <div className="mt-14">
+        <h3 className="text-[16px] font-semibold text-slate-100">Kontrol kualitas &amp; audit</h3>
+        <p className="mt-1 text-[13px] text-slate-400">
+          Sebelum publikasi, hasil di-audit dari verdict akhir hingga perhitungan dasar. Empat
+          koreksi utama membuat temuan lebih dapat dipertanggungjawabkan secara publik.
+        </p>
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {[
+            {
+              title: "Peer L3",
+              sub: "mean-of-shares",
+              desc: "Tiap K/L diberi bobot sama, bukan pooled pagu. Satu K/L ber-pagu raksasa tak lagi mendefinisikan ‘norma’ — temuan L3 palsu dipangkas signifikan.",
+            },
+            {
+              title: "Matching keselarasan",
+              sub: "sadar-mandat",
+              desc: "Anchor diprioritaskan ke KP yang ditugaskan ke K/L tersebut, bukan argmax global 753 KP (mis. jaminan kesehatan tak lagi ter-match biodiversitas).",
+            },
+            {
+              title: "Filter L3",
+              sub: "kecuali Dukungan Manajemen",
+              desc: "Program administratif catch-all dikecualikan dari L3 — komposisi belanja overhead bukan sinyal kebijakan substantif.",
+            },
+            {
+              title: "Hasil keselarasan",
+              sub: `${pipe.breakdown?.alignment.jenis.find((j) => j.label.toLowerCase().includes("orphan"))?.n ?? 0} policy orphan`,
+              desc: "Tidak ada belanja yang sepenuhnya di luar prioritas nasional (2026); kandidat terakhir pun masih dalam domain K/L-nya.",
+            },
+          ].map((a) => (
+            <motion.div
+              key={a.title}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4 }}
+              className="rounded-xl border border-ink-800 bg-ink-900/50 p-4"
+            >
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <span className="text-[13px] font-medium text-slate-100">{a.title}</span>
+                <span className="text-[11px] text-emerald-400/80">{a.sub}</span>
+              </div>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-slate-500">{a.desc}</p>
+            </motion.div>
+          ))}
+        </div>
+        <p className="mt-4 text-[12px] leading-relaxed text-slate-500">
+          Setelah seluruh perbaikan, reasoning di-generate ulang penuh via TreasurAI oss120b dan
+          bersikap konservatif (ragu → perlu review). Seluruh penalaran memakai model internal
+          oss120b — tidak ada model lain untuk reasoning.
+        </p>
+      </div>
+
       {/* Rincian temuan per analisis */}
       {pipe.breakdown && (
         <div className="mt-14">
