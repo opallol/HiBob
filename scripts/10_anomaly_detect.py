@@ -2,21 +2,13 @@
 Anomaly Detection Pipeline
 Embeds pagu texts -> cosine similarity vs KP nodes -> classify anomalies.
 
-Model: LazarusNLP/all-indo-e5-small (query: prefix)
-Menghasilkan distribusi skor lebih lebar (std ~10-15) dibanding bge-m3 (std ~2.5),
-sehingga threshold percentile lebih bermakna. KP vectors di-embed ulang saat runtime
-agar vector space konsisten dengan pagu texts.
+Model: LazarusNLP/all-indo-e5-small (prefix "query: "). Distribusi skornya lebih
+lebar daripada bge-m3 sehingga threshold percentile lebih bermakna. KP di-embed
+ulang saat runtime agar vector space konsisten dengan pagu texts.
 
-Perubahan dari versi sebelumnya:
-  - Fix 1A: ganti bge-m3 -> e5-small, re-embed KP at runtime (bukan dari DB)
-  - Fix 1B: K/L 999 (BAUN) dikategorikan treasury_crosscutting, bukan policy_orphan;
-            tambah absolute score floor (< ABS_FLOOR) sebagai syarat kedua policy_orphan
-  - Fix 1C: pre-fetch semua K/L info sebelum loop (hapus N+1 query)
-  - Fix 1D: ganti ROUTINE_KEYWORDS (text mining) -> kode resmi DIPA:
-            outputkro_kode LIKE 'EB%' ATAU program_uraian LIKE '%Dukungan Manajemen%'.
-            Verifikasi: 2,738 item (49% routine_support) salah label karena keyword
-            broad seperti 'pembinaan', 'pengelolaan', 'koordinasi'; 68% di antaranya
-            sebenarnya aligned ke KP (moderate/strong).
+spending_nature ditentukan dari kode resmi DIPA (outputkro EB-series, program
+Dukungan Manajemen, K/L 999 BAUN), bukan keyword text-mining yang rawan salah
+label (mis. "pembinaan"/"koordinasi" yang sebenarnya aligned ke KP).
 """
 import json
 import time
@@ -39,37 +31,27 @@ QUERY_PREFIX  = "query: "
 # Percentile cut-offs (rank dalam distribusi skor aktual).
 PCT = {"strong": 85, "moderate": 50, "weak": 15}
 
-# Mandate-aware anchoring (Fix D4, 2026-06-14):
-# best_match (anchor yang ditampilkan + dipakai reasoning) di-PRIORITASKAN ke KP
-# yang DITUGASKAN ke K/L tsb di RPJMN/RKP Lampiran III, bukan argmax global atas
-# 753 KP. Mencegah anchor absurd akibat lexical overlap (mis. "Program Sumber Daya
-# Kesehatan/Jaminan Kesehatan" K/L 024 ter-anchor ke "Sumber Daya Hayati/Ekosistem").
-# Anchor mandat dipakai jika skornya >= skor global terbaik - MANDATE_DELTA.
-# alignment_score (dasar klasifikasi percentile) tetap = skor global terbaik
-# (konservatif: mengukur kedekatan ke prioritas nasional manapun).
+# Anchor (best_match yang ditampilkan + dipakai reasoning) diprioritaskan ke KP
+# yang ditugaskan ke K/L tsb di RPJMN/RKP Lampiran III, bukan argmax global atas
+# 753 KP. Tanpa ini, lexical overlap memunculkan anchor absurd (mis. "Sumber Daya
+# Kesehatan/Jaminan Kesehatan" ter-anchor ke "Sumber Daya Hayati/Ekosistem").
+# Anchor mandat dipakai bila skornya >= skor global terbaik - MANDATE_DELTA;
+# alignment_score (dasar klasifikasi percentile) tetap memakai skor global terbaik.
 MANDATE_DELTA = 8.0
 
-# Absolute floor: item hanya bisa jadi policy_orphan jika skor JUGA di bawah
-# nilai ini. Mencegah item dengan skor cukup tinggi tapi kebetulan rank rendah
-# karena distribusi terkompres.
-# Fix D1 (2026-06-11): Turun dari 50 → 45 setelah verifikasi menunjukkan semua
-# orphan saat itu memiliki skor 45-50 dan sebenarnya false positive (nomenklatur).
-# Fix audit (2026-06-14): Turun lagi 45 → 40. Satu-satunya kandidat orphan tersisa
-# (ESDM "Pengelolaan Mineral & Batubara", skor 44,47 = item terendah di dataset)
-# ternyata masih dalam domain energi ESDM — reasoning menilainya manual_review,
-# bukan orphan sejati. Karena bahkan item terskor-terendah pun punya relasi domain,
-# orphan kini hanya berlaku untuk skor < 40 (benar-benar tanpa relasi semantik).
-# Hasil 2026: 0 policy_orphan — tidak ada belanja yang sepenuhnya di luar prioritas.
+# Absolute floor: policy_orphan butuh rank rendah DAN skor di bawah nilai ini —
+# mencegah item ber-skor cukup tapi kebetulan rank rendah (distribusi terkompres)
+# salah dilabeli orphan. Diset 40: di atas itu item masih punya relasi domain meski
+# beda nomenklatur (mis. pertambangan mineral & batubara ke KP energi). Praktiknya
+# tidak ada item dengan skor < 40, sehingga policy_orphan kosong.
 ABS_FLOOR = 40.0
 
 # K/L yang berfungsi sebagai bendahara negara / cross-cutting treasury —
 # fungsi ini tidak memetakan ke KP prioritas spesifik RPJMN/RKP.
 TREASURY_KL = {"999"}
 
-# Klasifikasi spending_nature menggunakan kode resmi DIPA, bukan keyword text mining.
-# Verifikasi DB (2026-06-11): 2,738 item (49% dari routine_support) salah klasifikasi
-# hanya karena keyword — 68% di antaranya sebenarnya moderate/strong alignment.
-# EB* = kode resmi Kemenkeu untuk output dukungan internal (EBA/EBB/EBC/EBD).
+# spending_nature dari kode resmi DIPA, bukan keyword text-mining yang rawan salah
+# label. EB* = kode Kemenkeu untuk output dukungan internal (EBA/EBB/EBC/EBD).
 ROUTINE_EB_PREFIX = "EB"
 ROUTINE_PROGRAM_PATTERN = "dukungan manajemen"
 
@@ -86,7 +68,7 @@ def _ensure_column(cur, name, ddl):
 def _ensure_verdict_column(cur):
     _ensure_column(cur, "treasurai_verdict",
                    "treasurai_verdict VARCHAR(20) NULL AFTER llm_model")
-    # Fix D4: kolom anchor mandat (transparansi + input prompt reasoning)
+    # Kolom anchor mandat (transparansi + input prompt reasoning)
     _ensure_column(cur, "mandate_match_code",  "mandate_match_code VARCHAR(20) NULL")
     _ensure_column(cur, "mandate_match_name",  "mandate_match_name VARCHAR(300) NULL")
     _ensure_column(cur, "mandate_match_score", "mandate_match_score DECIMAL(6,2) NULL")
@@ -123,7 +105,7 @@ def main():
                  "name": r[3], "source": r[4]} for r in kp_rows]
     print("[%.0fs] KP vectors ready (%d)" % (time.time() - t0, len(kp_rows)))
 
-    # Fix D4: peta kddept -> indeks KP yang ditugaskan ke K/L tsb (Lampiran III).
+    # Peta kddept -> indeks KP yang ditugaskan ke K/L tsb (Lampiran III).
     # Dipakai untuk menghitung mandate_best (kedekatan ke prioritas yang memang
     # diamanahkan ke K/L itu), bukan hanya argmax global.
     nodeid_to_idx = {info["id"]: i for i, info in enumerate(kp_info)}
@@ -166,7 +148,7 @@ def main():
     print("[%.0fs] Embedded %d texts" % (time.time() - t0, len(pagu_vecs)))
 
     # ------------------------------------------------------------------
-    # Fix 1C: Pre-fetch semua K/L info sekaligus (hapus N+1 query)
+    # Pre-fetch semua K/L info sekaligus (hindari N+1 query)
     # ------------------------------------------------------------------
     sample_ids = [ti["sample_id"] for ti in text_info]
     ph = ",".join(["%s"] * len(sample_ids))
@@ -232,7 +214,7 @@ def main():
         best_kp    = kp_info[indices[0]]
         rank       = pct_rank(best_score)
 
-        # Fix D4: hitung mandate_best = KP terbaik di antara KP yang ditugaskan
+        # Hitung mandate_best = KP terbaik di antara KP yang ditugaskan
         # ke K/L ini. Anchor di-prioritaskan ke mandat bila cukup dekat.
         kl_kode_for_mandate = kl_lookup.get(ti["sample_id"], (None,)*2)[1]
         mand_idx_list = kl_kp_indices.get(kl_kode_for_mandate, [])
@@ -276,7 +258,7 @@ def main():
         else:
             nature = "substantive"
 
-        # Anomaly type — Fix 1B: absolute floor untuk policy_orphan
+        # Anomaly type — absolute floor untuk policy_orphan
         if nature in ("routine_support", "treasury_crosscutting"):
             atype = "routine"
         elif strength == "none" and best_score < ABS_FLOOR:

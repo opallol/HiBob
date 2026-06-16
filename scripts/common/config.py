@@ -52,7 +52,7 @@ TREASURAI_MODELS = {
 }
 
 # --- Embeddings ---
-# Model aktif sejak Fix 1A (2026-06-11): Indonesian fine-tune, lebih akurat untuk
+# Model aktif: Indonesian fine-tune, lebih akurat untuk
 # istilah birokrasi Indonesia. Prefix "query: " wajib saat inference.
 EMBEDDING_MODEL = "LazarusNLP/all-indo-e5-small"
 EMBEDDING_DIMS = 384

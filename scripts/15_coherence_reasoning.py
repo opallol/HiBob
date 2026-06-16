@@ -19,7 +19,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 PACE = float(os.environ.get("TREASURAI_PACE", "4"))
 
-# Fix Windows console encoding untuk karakter Unicode dari TreasurAI
+# Paksa UTF-8 untuk console Windows (karakter Unicode dari TreasurAI)
 if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 

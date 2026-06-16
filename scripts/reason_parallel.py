@@ -5,7 +5,7 @@ oss120b butuh ~15-25s/call (generasi token), bukan throttle. Server menerima
 banyak koneksi serempak, jadi paralelisasi (default 8 worker) memangkas waktu
 total ~8x. Resume-safe: hanya proses llm_reasoning IS NULL.
 
-Reasoning HANYA via TreasurAI oss120b. Tidak ada DeepSeek.
+Reasoning via TreasurAI oss120b.
 
 Usage:
   python scripts/reason_parallel.py align            # alignment (ddac_anomaly)

@@ -1,9 +1,9 @@
 """
-run_rerun_all.py — Orkestrator re-run reasoning pasca-audit (D1-D6), PARALEL.
+run_rerun_all.py — Orkestrator re-run reasoning (alignment + coherence), paralel.
 Menjalankan reason_parallel.py (alignment lalu coherence) sampai TUNTAS.
 Resume-safe; loop sampai 0 pending (menangkap item yang sempat ke-skip).
 
-Reasoning HANYA via TreasurAI oss120b. Tidak ada DeepSeek.
+Reasoning via TreasurAI oss120b.
 
 Usage: python scripts/run_rerun_all.py [workers]
 """

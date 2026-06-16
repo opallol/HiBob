@@ -45,10 +45,9 @@ T_COH      = TABLE_COHERENCE
 T_COH_AKUN = TABLE_COHERENCE_AKUN
 
 # ---- defaults (override via CLI) ----------------------------------------
-PCT_LOW = 5             # percentile below which a similarity is "weak"
-                        # (was 15, lowered to 5 because bge-m3 underrates
-                        #  Indonesian government compound terms like
-                        #  "Infrastruktur Konektivitas"+"Pembangunan Jalan")
+PCT_LOW = 5             # persentil ambang "lemah". Diset rendah (5) karena model
+                        # under-rate istilah majemuk birokrasi Indonesia, mis.
+                        # "Infrastruktur Konektivitas" vs "Pembangunan Jalan".
 PEER_MIN = 5            # min peer K/L to trust a peer profile
 PEER_MIN_DETAIL = 3     # min peer K/L to include in detail table
 DEV_FLAG = 0.40         # total-variation distance above which akun mix is unusual
@@ -63,7 +62,7 @@ GENERIC_OUTPUT_PATTERNS = [
     'administrasi umum', 'tata kelola',
 ]
 
-# Fix F1 (2026-06-11): "Program Dukungan Manajemen" adalah catch-all resmi DIPA —
+# "Program Dukungan Manajemen" adalah catch-all resmi DIPA —
 # secara regulasi dirancang untuk menampung semua kegiatan administratif K/L,
 # sehingga kegiatan apapun di dalamnya sah dan tidak bisa di-flag L1.
 # Analog dengan GENERIC_OUTPUT_PATTERNS untuk L2.
@@ -71,12 +70,10 @@ GENERIC_PROGRAM_PATTERNS = [
     'dukungan manajemen',
 ]
 
-# Fix E1 (2026-06-11): Kemhan (012) dan Polri (060) menggunakan jargon militer teknis
-# yang secara konsisten under-scored oleh model embedding:
-#   "Penggunaan Kekuatan" <-> "Operasi Bidang Pertahanan" → skor 4.20 (false positive).
-# Verifikasi: 17 distinct keg-out combos flagged di L2 untuk K/L 012+060;
-# combos dengan output domain pertahanan/keamanan operasional di bawah adalah FP.
-# Combos dengan output manajemen/koordinasi generik tetap di-flag (genuine anomali).
+# Kemhan (012) dan Polri (060) menggunakan jargon militer teknis
+# yang konsisten under-scored oleh model (mis. "Penggunaan Kekuatan" vs
+# "Operasi Bidang Pertahanan"). Output domain pertahanan/keamanan operasional di
+# bawah dikecualikan dari flag L2; output manajemen/koordinasi generik tetap di-flag.
 MILITARY_DOMAIN_KL = {"012", "060"}
 MILITARY_DOMAIN_OUTPUT_PATTERNS = [
     'operasi bidang pertahanan',
@@ -196,12 +193,12 @@ def main():
         if c is not None:
             pk[(kl, prog, keg)] = c
         pu_lower = (pu or '').lower()
-        # Fix F1: Program Dukungan Manajemen adalah catch-all DIPA
+        # Program Dukungan Manajemen adalah catch-all DIPA
         if any(p in pu_lower for p in GENERIC_PROGRAM_PATTERNS):
             generic_prog_combos.add((kl, prog, keg))
             dm_prog_combos.add((kl, prog, keg))
-        # Fix F2: Military K/L — model under-scores domain-specific terminology
-        # (sama dengan MILITARY_DOMAIN_KL yang sudah dipakai di L2 / Fix E1)
+        # Military K/L — model under-scores domain-specific terminology
+        # (sama dengan MILITARY_DOMAIN_KL yang sudah dipakai di L2)
         elif kl in MILITARY_DOMAIN_KL:
             generic_prog_combos.add((kl, prog, keg))
     sims1 = np.array(list(pk.values()), dtype=np.float64)
@@ -225,7 +222,7 @@ def main():
         if c is not None:
             ko[(kl, prog, keg, out)] = c
         ou_lower = (ou or '').lower()
-        # Fix F3: EB-series output codes (EBA/EBB/EBC/EBD) adalah output
+        # EB-series output codes (EBA/EBB/EBC/EBD) adalah output
         # internal/rutin per klasifikasi resmi Kemenkeu — konsisten dengan
         # script 10 yang mengklasifikasikan EB sebagai routine_support.
         # Catatan: L3 tetap bisa mendeteksi anomali komposisi akun pada output EB.
@@ -234,7 +231,7 @@ def main():
         # Generic outputs: model cannot score these against kegiatan
         elif any(p in ou_lower for p in GENERIC_OUTPUT_PATTERNS):
             generic_out_combos.add((kl, prog, keg, out))
-        # Fix E1: military/defense K/L with operational defense outputs —
+        # military/defense K/L with operational defense outputs —
         # model consistently under-scores these due to technical jargon mismatch.
         # Only suppress outputs that are clearly in the defense/security operational
         # domain; generic management outputs under defense kegiatan are kept.
@@ -252,12 +249,10 @@ def main():
     # =====================================================================
     print("\n[%.0fs] LEVEL 3: output<->akun peer comparison" % (time.time() - t0))
 
-    # Peer profile via MEAN-OF-SHARES (Fix L3, 2026-06-14): tiap K/L = satu
-    # observasi dengan BOBOT SAMA, bukan pooled pagu-weighted. Pooling lama membuat
-    # satu K/L ber-pagu raksasa mendefinisikan 'norma' sehingga memunculkan anomali
-    # palsu (terbukti ~17% temuan L3 lama: mis. output QMA, satu K/L Rp1,7T modal
-    # menutupi 28 K/L lain yang barang). Mean-of-shares sesuai metode terdokumentasi
-    # dan benar untuk pertanyaan 'apakah komposisi K/L ini tidak lazim dibanding peer'.
+    # Peer profile pakai MEAN-OF-SHARES: tiap K/L diberi bobot sama (satu observasi),
+    # bukan pooled pagu-weighted. Kalau di-pool, satu K/L ber-pagu raksasa bisa
+    # mendefinisikan 'norma' dan memunculkan anomali palsu. Mean-of-shares menjawab
+    # pertanyaan yang benar: apakah komposisi K/L ini tidak lazim dibanding peer.
     cur.execute(
         f"SELECT outputkro_kode, kementerian_kode, LEFT(akun_kode,2) cat, "
         "CAST(SUM(total_pagu) AS DOUBLE) "
@@ -292,17 +287,15 @@ def main():
     print("[%.0fs]   own profiles for %s combos" % (time.time() - t0, format(len(own), ",")))
 
     dev_map = {}            # combo -> deviation (0..1)
-    adjusted_pc_map = {}    # combo -> peer count excluding self (Fix 3A)
+    adjusted_pc_map = {}    # combo -> peer count excluding self
     detail_rows = []
     n_detail_skipped = 0
     for combo, cats in own.items():
         kl, prog, keg, out = combo
-        # L3 exclusion (Fix audit, 2026-06-14): program "Dukungan Manajemen"
-        # dikecualikan dari L3 — overhead administratif lintas-K/L bervariasi wajar,
-        # komposisi akun-nya bukan sinyal kebijakan substantif (sebelumnya ~52%
-        # temuan "valid" koherensi berasal dari program manajemen = noise).
-        # CATATAN: pakai dm_prog_combos (HANYA Dukungan Manajemen), BUKAN
-        # generic_prog_combos/generic_out_combos — keduanya memuat K/L militer &
+        # Program "Dukungan Manajemen" dikecualikan dari L3 — overhead administratif
+        # lintas-K/L bervariasi wajar, komposisi akun-nya bukan sinyal kebijakan
+        # substantif. Pakai dm_prog_combos (HANYA Dukungan Manajemen), bukan
+        # generic_prog_combos/generic_out_combos yang juga memuat K/L militer &
         # EB-series yang komposisi akun L3-nya tetap valid untuk dibandingkan.
         if (kl, prog, keg) in dm_prog_combos:
             continue
@@ -365,7 +358,7 @@ def main():
         sim1 = pk.get((kl, prog, keg))
         sim2 = ko.get((kl, prog, keg, out))
         dev = dev_map.get((kl, prog, keg, out))
-        # Fix 3A: use adjusted peer count (self-excluded)
+        # use adjusted peer count (self-excluded)
         pc = adjusted_pc_map.get((kl, prog, keg, out), peer_count.get(out, 0))
 
         l1_coh = round(sim1 * 100, 2) if sim1 is not None else None
@@ -384,7 +377,7 @@ def main():
         if (sim2 is not None and sim2 < thr2
                 and (kl, prog, keg, out) not in generic_out_combos):
             flags.append("level2_kegiatan_output_lemah"); n_l2 += 1
-        # Fix 3B: higher threshold for internal support output codes (EBA/EBB/EBC/EBD)
+        # higher threshold for internal support output codes (EBA/EBB/EBC/EBD)
         l3_thr = DEV_FLAG_INTERNAL if out.startswith("EB") else dev_flag
         if dev is not None and pc >= peer_min and dev >= l3_thr:
             flags.append("level3_akun_tidak_lazim"); n_l3 += 1

@@ -8,13 +8,13 @@ Taksonomi:
   - manual_review  : tidak cukup bukti untuk memutuskan → perlu cek manusia.
   - unclear        : tidak ada verdict yang dapat dikenali.
 
-Mekanisme (Fix D1, 2026-06-14):
+Mekanisme:
   1. Utama — tag eksplisit `VERDICT: <label>` yang diminta di prompt. Tidak ambigu.
   2. Fallback — pola KESIMPULAN ("dikategorikan/termasuk/tergolong sebagai X"),
      ambil match PERTAMA (kalimat klasifikasi), bukan kemunculan kata pertama.
-     Memperbaiki bug lama: teks "perlu review manual ... bukan valid atau sekadar
-     false positive" salah ter-label false_positive karena 'false positive'
-     dicek lebih dulu.
+     Penting karena teks seperti "perlu review manual ... bukan valid atau sekadar
+     false positive" tidak boleh ter-label false_positive hanya karena frasa
+     'false positive' muncul lebih dulu.
 """
 import re
 
