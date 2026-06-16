@@ -38,11 +38,11 @@ SENTINEL adalah sistem analisis keselarasan belanja negara yang mengekstrak, mem
     │
     ▼
 [Phase 8: K/L Assign] ── Parse institutional assignments
-    │  deepseek_policy_kl_assignments (604 rows, 72 K/L)
+    │  deepseek_policy_kl_assignments (534 rows, 78 K/L)
     │
     ▼
 [Phase 10: Policy Alignment] ── e5-small cosine pagu vs KP nodes (runtime)
-    │  ddac_anomaly_2026 (1 orphan + 1,541 weak) + TreasurAI reasoning
+    │  ddac_anomaly_2026 (0 orphan + 1,546 weak) + TreasurAI reasoning
     │
     ▼
 [Phase 12-13: Internal Coherence] ── 3-level structural check
@@ -145,7 +145,7 @@ ke `clean_node_name_ai`: (1) potong sebelum penanda sasaran `NN -`; (2) pisah
 camelCase; (3) pisah kata sambung yang menempel (`Abadidan`→`Abadi dan`).
 753 KP + 43 PN mendapat `clean_node_name_ai` eksplisit. 167 PP menggunakan
 `node_name` langsung (PP names sudah bersih dari struktur RPJMN). Non-destruktif;
-ekspor web memakai `COALESCE(clean_node_name_ai, node_name)` untuk semua 963 nodes.
+ekspor web memakai `COALESCE(clean_node_name_ai, node_name)` untuk semua 962 nodes.
 
 ## 8. Web Visualisasi Review (Human-in-the-loop)
 

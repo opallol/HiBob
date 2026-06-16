@@ -19,12 +19,12 @@ SENTINEL adalah sistem analisis keselarasan belanja negara yang mengaudit DIPA 2
 | 2 | PDF Extraction | ✅ DONE | 17 dokumen, 4,478 halaman, 731K kata |
 | 3a | Chunking | ✅ DONE | 1,001 chunks dengan level hints |
 | 3b | AI Cleaning | ✅ DONE | 990/1,001 chunks cleaned (11 chunk pendek skip) |
-| 4 | Node Extraction | ✅ DONE | 963 nodes (43 PN + 167 PP + 753 KP) |
-| 5 | Edge Building | ✅ DONE | 857 edges (hierarchy tree) |
+| 4 | Node Extraction | ✅ DONE | 962 nodes (43 PN + 167 PP + 752 KP) |
+| 5 | Edge Building | ✅ DONE | 856 edges (hierarchy tree) |
 | 6 | Table Extraction | ✅ DONE | script 06 ada, tabel belum diisi (0 rows) |
 | 7 | Embeddings (legacy) | ✅ DONE | diganti runtime e5-small di script 10+13 |
-| 8 | K/L Assignment | ✅ DONE | 604 penugasan institusi (72 K/L) |
-| 10 | Policy Alignment | ✅ DONE | 1 orphan + 1,541 weak + TreasurAI (389 items) |
+| 8 | K/L Assignment | ✅ DONE | 534 penugasan institusi (78 K/L) |
+| 10 | Policy Alignment | ✅ DONE | 0 orphan + 1,546 weak + reasoning TreasurAI |
 | 12 | Coherence (jenis komponen) | ✅ DONE | 1.5M baris |
 | 13 | Koherensi 3 Level | ✅ DONE | Level 1/2/3 + peer comparison |
 | 14 | Bersih Nama Simpul | ✅ DONE | 753 KP + 43 PN (167 PP via node_name) |
@@ -41,11 +41,11 @@ SENTINEL adalah sistem analisis keselarasan belanja negara yang mengaudit DIPA 2
 | documents | 17 | 17 | TIE |
 | pages | 4,478 | 4,478 | TIE |
 | chunks | 1,444 | 1,001 (990 cleaned) | **SN** (smarter chunking) |
-| nodes | 5,334 | 963 (connected) | **SN** (hierarchy nyata) |
-| **edges** | **0** | **857** | **SN** |
+| nodes | 5,334 | 962 (connected) | **SN** (hierarchy nyata) |
+| **edges** | **0** | **856** | **SN** |
 | **embeddings** | **0** | **0 (e5-small runtime)** | **SN** |
-| kl_assignments | 0 | 604 (72 K/L) | **SN** |
-| anomaly (alignment) | 0 | 1 orphan + 1,541 weak | **SN** |
+| kl_assignments | 0 | 534 (78 K/L) | **SN** |
+| anomaly (alignment) | 0 | 0 orphan + 1,546 weak | **SN** |
 | coherence | 0 | 1,504,455 (3 level) | **SN** |
 
 ### Quality Comparison
@@ -54,9 +54,9 @@ SENTINEL adalah sistem analisis keselarasan belanja negara yang mengaudit DIPA 2
 |--------|-------|----------|
 | OCR text quality | Raw (garbled) | AI-cleaned ready |
 | AI cleaning applied | 0% (all NULL) | Pipeline ready |
-| Hierarchy connected | No (0 edges) | Yes (857 edges, full tree) |
+| Hierarchy connected | No (0 edges) | Yes (856 edges, full tree) |
 | Semantic search | No (0 embeddings) | Yes (e5-small runtime) |
-| K/L mapping | Not parsed | 604 penugasan (72 K/L) |
+| K/L mapping | Not parsed | 534 penugasan (78 K/L) |
 | Project documentation | None | README + ARCH + SCHEMA + MASTER + COMPARE |
 | Self-contained deploy | No | Yes (17 script + common + web visualisasi) |
 
@@ -117,7 +117,7 @@ Cost: ~$0.14/1M tokens (~$5-10 for all 1,001 chunks)
 | edges | Relationships | Multi-document hierarchies differ |
 | tables | Structured data | Different extraction method |
 | table_rows | Row-level data | Drill-down capability |
-| embeddings | Vectors | Pluggable model (swap bge-m3 anytime) |
+| embeddings | Vectors | Model lokal e5-small (LazarusNLP, 384-dim) |
 | kl_assignments | K/L mapping | Many-to-many (KP↔K/L) |
 
 ### Why Smarter Chunking
@@ -175,16 +175,16 @@ python scripts\07_generate_embeddings.py
 
 ### Short-term (done)
 1. ✅ AI cleaning seluruh chunk → PP/KP extraction terbuka
-2. ✅ Re-extract nodes → full hierarchy (963 nodes)
-3. ✅ Build edges → connected planning graph (857 edges)
+2. ✅ Re-extract nodes → full hierarchy (962 nodes)
+3. ✅ Build edges → connected planning graph (856 edges)
 
 ### Medium-term (done)
 1. ✅ Table extraction
-2. ✅ K/L assignment parsing (604 penugasan, 72 K/L)
+2. ✅ K/L assignment parsing (534 penugasan, 78 K/L)
 3. ✅ Embedding: e5-small runtime (LazarusNLP, semantic search aktif)
 
 ### Long-term (done)
-1. ✅ Anomaly detection pada ringkasan_pagu (1 orphan + 1,541 weak + TreasurAI 389 items)
+1. ✅ Anomaly detection pada ringkasan_pagu (0 orphan + 1,546 weak + reasoning TreasurAI)
 2. ✅ Koherensi internal 3 level (program↔kegiatan↔output↔akun, peer comparison)
 3. ✅ Web visualisasi peta anomali + knowledge graph (Vite + React, statis embeddable)
 
@@ -198,7 +198,7 @@ python scripts\07_generate_embeddings.py
 |-------|-----|-----------------|
 | 1 Program↔Kegiatan | cosine e5-small (pct_low=5) | 14,272 |
 | 2 Kegiatan↔Output | cosine e5-small (pct_low=5) | 16,310 |
-| 3 Output↔Komposisi Akun | peer comparison lintas K/L | 142,384 |
+| 3 Output↔Komposisi Akun | peer comparison lintas K/L (mean-of-shares) | 24,224 |
 
 Total ddac_coherence_2026: 1,504,455 baris (1:1 dengan ddac_pagu_akun_2026).
 Threshold L1/L2: persentil-5 similarity; L3: deviasi ≥ 0.40 (EB-series ≥ 0.65,
@@ -260,12 +260,12 @@ SENTINEL kini **lengkap end-to-end** dan unggul atas sistem lama di setiap
 dimensi:
 
 1. **AI Cleaning** → 990/1,001 chunks dibersihkan (Codex 0%).
-2. **Hierarchy** → 857 edges, 963 nodes terkoneksi (Codex 0 edges, 5,334 flat).
+2. **Hierarchy** → 856 edges, 962 nodes terkoneksi (Codex 0 edges, 5,334 flat).
 3. **Embeddings** → e5-small runtime (LazarusNLP, Indonesian fine-tune; Codex 0).
-4. **Anomaly Detection** → 1 orphan + 1,541 weak_alignment + TreasurAI (389 items).
-5. **Koherensi Internal** → 3 level: L1 14,272 / L2 16,310 / L3 142,384 baris tertandai.
+4. **Anomaly Detection** → 0 orphan + 1,546 weak_alignment + reasoning TreasurAI.
+5. **Koherensi Internal** → 3 level: L1 14,272 / L2 16,310 / L3 24,224 baris tertandai.
 6. **Name Cleaning** → 753 KP + 43 PN via regex; 167 PP sudah bersih secara alami.
-7. **K/L Assignment** → 604 penugasan, 72 K/L (Codex 0).
+7. **K/L Assignment** → 534 penugasan, 78 K/L (Codex 0).
 8. **Documentation** → README + ARCHITECTURE + SCHEMA + MASTER + COMPARISON.
 
 Pipeline self-contained: 17 script + web visualisasi + modul bersama `scripts/common`.

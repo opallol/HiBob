@@ -17,8 +17,8 @@
 > dan 5.4 untuk distribusi terkini.
 >
 > **Update 2026-06-12:** TreasurAI reasoning diperluas ke **semua** anomali. Script 11
-> kini memproses 1 orphan + 1,541 weak_alignment (total 1,542 item); script 15 (baru)
-> memproses coherence L3 top-30 output unik → 19,235 baris. Model upgrade ke oss120b.
+> kini memproses 0 orphan + 1,546 weak_alignment (total 1,546 item); script 15 (baru)
+> memproses koherensi L3 + L1/L2 → reasoning ulang penuh (174,235 baris). Model oss120b.
 > Prompt di-enrich konteks mandat RPJMN/RKP per K/L via `common/kl_context.py` (baru).
 > SSL self-signed Kemenkeu ditangani `verify=False`. Lihat Bagian 2.4, 3, dan 6.1.
 
@@ -59,8 +59,8 @@ secara multi-dimensi.
               ▼            ▼            ▼
          deepseek_     ddac_pagu_    t_kmpnen_
          policy_*      akun_2026     2026
-         (963 nodes,   (1.5M rows)   (96K rows)
-          857 edges,
+         (962 nodes,   (1.5M rows)   (96K rows)
+          856 edges,
           e5-small
           runtime)
               │            │            │
@@ -76,7 +76,7 @@ secara multi-dimensi.
               ▼            │            ▼
          ddac_             │         ddac_
          anomaly_2026      │         coherence_2026
-         (1 orphan+1541 weak) │
+         (0 orphan+1546 weak) │
               │            │
               ▼            │
          TreasuryAI        │
@@ -129,7 +129,7 @@ Potongan teks untuk processing LLM.
 | level_hint | PN / PP / KP / TEXT / KL_MATRIX |
 | oc_text | 1 jika perlu OCR correction |
 
-### deepseek_policy_nodes (963 rows)
+### deepseek_policy_nodes (962 rows)
 Entitas perencanaan (PN, PP, KP). Komposisi: 43 PN + 167 PP + 753 KP.
 9 false PN (nomor halaman PDF) dan 5 PP anak-nya telah dihapus (2026-06-11).
 
@@ -141,7 +141,7 @@ Entitas perencanaan (PN, PP, KP). Komposisi: 43 PN + 167 PP + 753 KP.
 | node_name | Nama entitas (AI-cleaned) |
 | parent_code | Kode parent untuk edge building |
 
-### deepseek_policy_edges (857 rows)
+### deepseek_policy_edges (856 rows)
 Hierarchy tree PN→PP→KP.
 
 | Column | Desc |
@@ -199,7 +199,7 @@ secara runtime menggunakan e5-small. Tabel ini adalah sisa dari versi bge-m3 seb
 | best_match_code | KP node code terdekat |
 | best_match_name | KP node name terdekat |
 | top3_matches | JSON top-3 KP candidates |
-| llm_reasoning | TreasurAI reasoning naratif (oss120b) — terisi untuk 1,542 item |
+| llm_reasoning | TreasurAI reasoning naratif (oss120b) — terisi untuk 1,546 item |
 | llm_model | Model yang digunakan: 'oss120b' |
 | treasurai_verdict | valid / false_positive / manual_review |
 | review_status | confirmed / dismissed / needs_review / pending |
@@ -219,7 +219,7 @@ Deteksi anomali struktur internal DIPA secara **3 level** (semua kolom kini teri
 | akun_komposisi_score | **Level 3** skor anomali komposisi belanja (0-100) ✅ |
 | coherence_score | Composite: 0.35·jenis + 0.20·L1 + 0.20·L2 + 0.25·L3 |
 | anomaly_flags | JSON daftar level yang terpicu (mis. `["level3_akun_tidak_lazim"]`) |
-| llm_reasoning | TreasurAI reasoning untuk L3 anomali (oss120b) — terisi 19,235 baris |
+| llm_reasoning | TreasurAI reasoning koherensi (oss120b) — terisi 174,189 baris |
 | llm_model | 'oss120b' |
 | treasurai_verdict | valid / false_positive / manual_review |
 | review_status_coherence | confirmed / dismissed / needs_review / pending |
@@ -251,7 +251,7 @@ Detail perbandingan komposisi belanja per output terhadap **peer lintas K/L**
 `top_unexpected` memuat kategori akun 2-digit yang share-nya jauh di atas peer,
 mis. `{"akun":"53","label":"Belanja Modal","own":0.98,"peer":0.00}`.
 
-## 2.7 deepseek_policy_kl_assignments — K/L Mapping (604 rows)
+## 2.7 deepseek_policy_kl_assignments — K/L Mapping (534 rows)
 
 Pemetaan KP → K/L pelaksana (dari Matriks Lampiran III RPJMN/RKP).
 
@@ -279,21 +279,21 @@ Semua script di `D:\Project\deepseek-kms\scripts\`
 | 04 | extract_nodes.py | clean chunks | nodes (PN/PP/KP) | ✅ |
 | 05 | build_edges.py | nodes | edges (hierarchy) | ✅ |
 | 07 | generate_embeddings.py | nodes | bge-m3 embeddings | ✅ |
-| 08 | extract_kl.py | KL_MATRIX chunks | kl_assignments (585) | ✅ |
+| 08 | extract_kl.py | KL_MATRIX chunks | kl_assignments (534, pasca-rekonsiliasi kode K/L) | ✅ |
 | 09 | master_pipeline.py | all above | final nodes+edges+emb | ✅ |
-| 10 | anomaly_detect.py | pagu + KP (e5-small runtime) | ddac_anomaly_2026 (1 orphan, 1,541 weak) | ✅ |
-| 11 | treasurai_reasoning.py | ddac_anomaly (orphan+weak) | llm_reasoning — **1,542 item** (1 orphan + 1,541 weak, oss120b + RPJMN/RKP mandate ctx) | ✅ |
+| 10 | anomaly_detect.py | pagu + KP (e5-small runtime) | ddac_anomaly_2026 (0 orphan, 1,546 weak) | ✅ |
+| 11 | treasurai_reasoning.py | ddac_anomaly (orphan+weak) | llm_reasoning — **1,546 item** (0 orphan + 1,546 weak, oss120b + RPJMN/RKP mandate ctx) | ✅ |
 | 12 | coherence.py | pagu + t_kmpnen | ddac_coherence_2026 (jenis komponen) | ✅ |
 | 13 | coherence_levels.py | coherence + pagu | Level 1/2/3 + composite + peer detail (v2: pct_low=5, peer_min=5, --cli-args) | ✅ |
 | 14 | fix_node_names.py | nodes | clean_node_name_ai (753 KP + 43 PN) | ✅ |
-| 15 | coherence_reasoning.py | coherence L3 anomali | llm_reasoning — **19,235 baris** (30 output unik top pagu, oss120b + RPJMN/RKP mandate ctx) | ✅ |
-| 15b | coherence_template.py | coherence L3 anomali | llm_reasoning — **142,384 baris** (SEMUA output dengan akun_komposisi_score ≥ 40, oss120b, idempotent) | ✅ |
+| 15 | coherence_reasoning.py | coherence L3 anomali | llm_reasoning — **174,189 baris** (output koherensi L3+L1/L2, peer mean-of-shares, oss120b + mandate ctx) | ✅ |
+| 15b | coherence_template.py | coherence L3 anomali | llm_reasoning — **24,224 baris** L3 tertandai (peer mean-of-shares; program Dukungan Manajemen dikecualikan; oss120b, idempotent) | ✅ |
 | 16 | export_web.py | coherence + anomaly + KB | JSON statis ke `web/public/data/` (manifest, nodes, details per K/L, knowledge_graph, pipeline) | ✅ |
 | 17 | refresh_analysis.py | - | Orchestrator refresh: jalankan 10→11→12→13→15b→16 + web build | ✅ |
 
 > **Perbedaan 15 vs 15b:** Script 15 hanya memproses top-30 output unik berdasarkan pagu
-> (19,235 baris). Script **15b adalah produksi** — memproses SEMUA output dengan
-> `akun_komposisi_score >= 40` (142,384 baris), idempotent (skip baris yang sudah ada reasoning).
+> (174,189 baris). Script **15b adalah produksi** — memproses output L3 tertandai dengan
+> `akun_komposisi_score >= 40` (24,224 baris tertandai), idempotent (skip baris yang sudah ada reasoning).
 >
 > **Web Visualisasi:** `scripts/16_export_web.py` mengekspor JSON statis →
 > `web/` (Vite + React). Peta anomali interaktif tanpa backend. Lihat Bagian 9.
@@ -368,8 +368,8 @@ menampilkan kartu detail (reasoning oss120b + komposisi akun + mandat RPJMN/RKP)
 
 ## 5.1 Knowledge Graph
 
-- **963 planning nodes** (43 PN + 167 PP + 753 KP)
-- **857 edges** — connected RPJMN/RKP hierarchy tree (PN→PP→KP)
+- **962 planning nodes** (43 PN + 167 PP + 752 KP)
+- **856 edges** — connected RPJMN/RKP hierarchy tree (PN→PP→KP)
 - **e5-small runtime embeddings** — di-embed ulang setiap run dari `clean_node_name_ai`
 - **990/1,001 chunks** AI-cleaned (11 chunks tidak butuh cleaning)
 - Node names fully cleaned: 9 false PN (nomor halaman PDF) dihapus, spillover KP
@@ -393,13 +393,13 @@ PN 01: Memperkokoh Ideologi Pancasila, Demokrasi, dan HAM
 - **Model:** LazarusNLP/all-indo-e5-small (384-dim, Indonesian fine-tune), runtime embed
 - **Klasifikasi berbasis kode resmi:** output `EB%` = routine_support,
   program `Dukungan Manajemen` = routine_support (bukan keyword mining)
-- **ABS_FLOOR = 45** — semua item dengan skor < 45 dinyatakan policy_orphan
+- **ABS_FLOOR = 40** — item policy_orphan butuh rank < P15 DAN skor < 40
 
 ### Distribusi Anomaly (terkini):
 | anomaly_type | spending_nature | Rows | Pagu |
 |-------------|----------------|------|------|
 | aligned | substantive | 2,747 | Rp 83.0 T |
-| weak_alignment | substantive | 1,541 | Rp 152.1 T |
+| weak_alignment | substantive | 1,546 | Rp 152.1 T |
 | routine | routine_support | 2,905 | Rp 8.3 T |
 | routine | treasury_crosscutting | 41 | Rp 564.9 T |
 | policy_orphan | substantive | **1** | Rp 0.0 T |
@@ -470,18 +470,18 @@ kolom `clean_node_name_ai` (non-destruktif): potong ke nama asli sebelum penanda
 sasaran `NN -`, pisah camelCase (`HakAsasi`→`Hak Asasi`) dan kata sambung yang
 menempel (`Abadidan`→`Abadi dan`).
 
-**Hasil terkini (963 nodes):**
+**Hasil terkini (962 nodes):**
 - **753 KP**: `clean_node_name_ai` terisi 100% (AI-cleaned + Fix C1/C2)
 - **43 PN**: `clean_node_name_ai` terisi 100% (canonical names RPJMN resmi)
 - **167 PP**: `clean_node_name_ai` NULL — menggunakan `node_name` langsung.
   PP names dari dokumen RPJMN umumnya sudah bersih (nama program resmi).
 
-Ekspor web & query memakai `COALESCE(clean_node_name_ai, node_name)` untuk semua 963 nodes.
+Ekspor web & query memakai `COALESCE(clean_node_name_ai, node_name)` untuk semua 962 nodes.
 
 ## 5.6 K/L Institutional Mapping (NEW)
 
 Script `08_extract_kl.py` memetakan KP → K/L pelaksana dari Matriks Lampiran III:
-**604 penugasan** (362 simpul KP/PP, 72 K/L), confidence mayoritas @0.9.
+**534 penugasan** (simpul KP/PP, 78 K/L), confidence mayoritas @0.9.
 
 ---
 
@@ -684,14 +684,14 @@ D:\Project\deepseek-kms\
 | Documents | 17 | 17 |
 | Pages | 4,478 | 4,478 |
 | Chunks | 1,444 | 990 (smarter) |
-| Nodes | 5,334 | 963 (connected) |
-| **Edges** | **0** ❌ | **857** ✅ |
+| Nodes | 5,334 | 962 (connected) |
+| **Edges** | **0** ❌ | **856** ✅ |
 | **Embeddings** | **0** ❌ | **e5-small runtime** ✅ |
 | **AI Cleaned** | **0%** ❌ | **100%** ✅ |
-| **K/L Mapping** | **N/A** ❌ | **604 penugasan, 72 K/L** ✅ |
-| **Anomaly Detection** | **N/A** ❌ | **1 orphan + 1,541 weak (e5-small, ABS_FLOOR=45)** ✅ |
+| **K/L Mapping** | **N/A** ❌ | **534 penugasan, 78 K/L** ✅ |
+| **Anomaly Detection** | **N/A** ❌ | **0 orphan + 1,546 weak (e5-small, ABS_FLOOR=40)** ✅ |
 | **Coherence (3 level)** | **N/A** ❌ | **L1=30 · L2=200 · L3=895 combos flagged** ✅ |
-| **Name Cleaning** | **N/A** ❌ | **796 AI-cleaned + 167 PP (node_name) = 963 total** ✅ |
+| **Name Cleaning** | **N/A** ❌ | **795 cleaned + 167 PP (node_name) = 962 total** ✅ |
 | **Web Visualisasi** | **N/A** ❌ | **Peta anomali bubblemaps (Vite + React, statis)** ✅ |
 | **Hierarchy** | Flat list | Connected tree |
 | **Self-contained** | No | 17 scripts + web visualisasi + 6 docs |
@@ -703,7 +703,7 @@ D:\Project\deepseek-kms\
 Antarmuka eksplorasi interaktif gaya **bubblemaps** untuk menyajikan hasil ke pemangku kepentingan.
 
 - **Skrip ekspor:** `scripts/16_export_web.py` → JSON statis ke `web/public/data/`
-  (manifest, 1.101 node bubble, detail per K/L lazy-load, knowledge graph, pipeline).
+  (manifest, 608 node bubble koherensi + 1.546 alignment, detail per K/L lazy-load, knowledge graph, pipeline).
 - **Frontend:** `web/` — Vite + React + TypeScript + Tailwind, bubble via `react-force-graph-2d`
   (WebGL/d3-force), motion via Framer Motion. Data **statis, tanpa backend**.
 - **Encoding:** posisi = cluster (filter: pola akun / verdict / per K/L), warna = status verdict

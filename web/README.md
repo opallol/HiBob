@@ -23,7 +23,7 @@ Data JSON di-generate dari database oleh `../scripts/16_export_web.py`
 | File | Isi |
 |------|-----|
 | `manifest.json` | totals, mode cluster, legenda verdict, kamus K/L & pola |
-| `coherence/nodes.json` | 1.101 bubble anomali L3 (ringan, tanpa reasoning) |
+| `coherence/nodes.json` | 608 bubble anomali koherensi: 276 L3 + 332 L1/L2 (ringan, tanpa reasoning) |
 | `coherence/details/<kl>.json` | detail per output (reasoning, komposisi, mandat) — lazy-load |
 | `knowledge_graph.json` | struktur RPJMN/RKP (PN/PP/KP + edge) |
 | `pipeline.json` | 6 fase pipeline + angka kunci |

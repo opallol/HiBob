@@ -287,10 +287,10 @@ kategori akun 2-digit (51 Pegawai, 52 Barang, 53 Modal, 54 Bunga, 55 Subsidi,
 |---------|---------------|-------------------|
 | clean_text_ai | Empty (NULL) | Populated via LLM |
 | clean_node_name_ai | Empty (NULL) | Populated (753 KP + 43 PN; 167 PP via node_name) |
-| edges table | Exists but empty | Populated with hierarchy (857 edges) |
+| edges table | Exists but empty | Populated with hierarchy (856 edges) |
 | embeddings | Exists but empty | Legacy (0 rows); e5-small dipakai runtime di script 10/13 |
 | document_text_path | Not stored | source_path tracked |
 | extraction_status | Not tracked | Per-document status field |
-| kl_assignments | Not present | Dedicated table (604 baris, 72 K/L) |
+| kl_assignments | Not present | Dedicated table (534 baris, 78 K/L) |
 | coherence (3 level) | Not present | ddac_coherence_2026 + _akun_2026 |
 | normalized_code | Not present | PN-01, PP-01-01 format |

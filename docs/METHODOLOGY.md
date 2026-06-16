@@ -137,13 +137,13 @@ verdict: "false_positive" (sesuai RPJMN) / "valid" / "manual_review"
     [clean_text_ai per chunk]
           │
           ▼ Regex state machine
-    [deepseek_policy_nodes: 963 node PN/PP/KP]
+    [deepseek_policy_nodes: 962 node PN/PP/KP]
           │
           ▼ Code prefix matching
-    [deepseek_policy_edges: 857 relasi hierarki]
+    [deepseek_policy_edges: 856 relasi hierarki]
           │
           ▼ DeepSeek Chat API ← (dokumen publik)
-    [deepseek_policy_kl_assignments: 604 penugasan K/L]
+    [deepseek_policy_kl_assignments: 534 penugasan K/L]
           │
           ▼ Digabung dengan:
     [ddac_pagu_akun_2026: 1.504.455 baris DIPA 2026] ← DATA INTERNAL
@@ -201,12 +201,12 @@ Knowledge base dibangun dari dokumen perencanaan nasional resmi yang dipublikasi
 | Dokumen PDF yang diproses | 17 |
 | Halaman yang diekstrak | 4.478 |
 | Total kata | 735.722 |
-| **Node kebijakan** | **963** |
+| **Node kebijakan** | **962** |
 | — Prioritas Nasional (PN) | 43 |
 | — Program Prioritas (PP) | 167 |
 | — Kegiatan Prioritas (KP) | 753 |
-| Relasi hierarki (edges) | 857 |
-| Penugasan K/L ke KP | 604 (72 K/L unik) |
+| Relasi hierarki (edges) | 856 |
+| Penugasan K/L ke KP | 534 (78 K/L unik) |
 
 ---
 
@@ -419,7 +419,7 @@ Tanpa mekanisme ini: KP di chunk ke-5 yang tidak mengulang "PRIORITAS NASIONAL 0
 **Deduplikasi:** `WHERE (document_id, node_type, node_code)` sudah ada → skip.
 
 **Output DB:**
-- `deepseek_policy_nodes` → **963 baris**
+- `deepseek_policy_nodes` → **962 baris**
   - 43 PN (Prioritas Nasional 01–08 + turunan RKP)
   - 167 PP (Program Prioritas)
   - 753 KP (Kegiatan Prioritas)
@@ -436,7 +436,7 @@ Setelah teks bersih tersedia, sistem perlu membaca teks itu layaknya seorang ana
 ### Detail Teknis
 
 **Script:** `05_build_edges.py`
-**Input:** `deepseek_policy_nodes` — 963 node dengan `parent_code`
+**Input:** `deepseek_policy_nodes` — 962 node dengan `parent_code`
 
 **Pass 1 — Direct parent_code matching:**
 ```sql
@@ -475,13 +475,13 @@ WHERE
 **Deduplikasi:** `UNIQUE KEY (parent_node_id, child_node_id, edge_type)` di level DB.
 
 **Output DB:**
-- `deepseek_policy_edges` → **857 baris**
+- `deepseek_policy_edges` → **856 baris**
 - Setiap edge: `parent_node_id`, `child_node_id`, `edge_type`, `source_type`, `confidence`
-- Graf ini yang mengubah 963 node flat menjadi pohon yang bisa di-traverse
+- Graf ini yang mengubah 962 node flat menjadi pohon yang bisa di-traverse
 
 ### Penjelasan Konseptual
 
-Jika node-node dari fase sebelumnya ibarat kartu nama yang masing-masing bertuliskan nama dan kode — maka edge adalah benang yang menghubungkan kartu-kartu itu membentuk pohon keluarga. Tanpa edge, kita hanya punya 963 kartu nama yang berserakan dan tidak bisa menjawab pertanyaan "KP mana saja yang berada di bawah PN Transformasi Ekonomi?" Dengan 857 edge, kita kini punya graf yang bisa ditelusuri — mulai dari PN di level tertinggi, turun ke PP, turun lagi ke KP. Ini yang membedakan sistem ini dari sistem lain yang hanya menyimpan daftar entitas tanpa relasi: kita bisa melakukan graph traversal, menjawab pertanyaan hierarkis, dan memvisualisasikan pohon perencanaan secara utuh.
+Jika node-node dari fase sebelumnya ibarat kartu nama yang masing-masing bertuliskan nama dan kode — maka edge adalah benang yang menghubungkan kartu-kartu itu membentuk pohon keluarga. Tanpa edge, kita hanya punya 962 kartu nama yang berserakan dan tidak bisa menjawab pertanyaan "KP mana saja yang berada di bawah PN Transformasi Ekonomi?" Dengan 856 edge, kita kini punya graf yang bisa ditelusuri — mulai dari PN di level tertinggi, turun ke PP, turun lagi ke KP. Ini yang membedakan sistem ini dari sistem lain yang hanya menyimpan daftar entitas tanpa relasi: kita bisa melakukan graph traversal, menjawab pertanyaan hierarkis, dan memvisualisasikan pohon perencanaan secara utuh.
 
 ---
 
@@ -545,8 +545,8 @@ DeepSeek diminta:
 **Deduplikasi:** `seen` set mencegah duplikasi pasangan (node_id, kddept, role).
 
 **Output DB:**
-- `deepseek_policy_kl_assignments` → **604 baris**
-- 72 K/L unik
+- `deepseek_policy_kl_assignments` → **534 baris**
+- 78 K/L unik
 - Kolom: `node_id` (FK ke KP), `kddept` (kode K/L), `nmdept_normalized`, `role`, `confidence`, `evidence`
 
 ### Penjelasan Konseptual
@@ -721,7 +721,7 @@ def get_kl_mandate_context(cur, kl_kode, max_kp=10):
     #   - KP 04.12.02 [pelaksana]: Penguatan Ekosistem Pendukung... (RPJMN)"
 ```
 
-Coverage: 72 K/L memiliki penugasan KP — mencakup ~80% dari weak_alignment items dan ~70% dari K/L dengan L3 anomali. K/L tanpa penugasan tetap diproses tanpa konteks mandat.
+Coverage: 78 K/L memiliki penugasan KP — mencakup ~80% dari weak_alignment items dan ~70% dari K/L dengan L3 anomali. K/L tanpa penugasan tetap diproses tanpa konteks mandat.
 
 #### Script 11 — Policy Alignment Reasoning
 
@@ -1157,9 +1157,9 @@ Contoh temuan valid yang dapat dipertanggungjawabkan: output "Prasarana" dengan 
 | `deepseek_policy_documents` | Script 01/02 | 17 | Registri dokumen PDF |
 | `deepseek_policy_pages` | Script 02 | 4.478 | Raw text per halaman |
 | `deepseek_policy_chunks` | Script 03/03c | 1.001 | Chunk + clean_text_ai |
-| `deepseek_policy_nodes` | Script 04/14 | 963 | Node PN/PP/KP knowledge graph |
-| `deepseek_policy_edges` | Script 05 | 857 | Relasi hierarki |
-| `deepseek_policy_kl_assignments` | Script 08 | 604 | Penugasan K/L per KP |
+| `deepseek_policy_nodes` | Script 04/14 | 962 | Node PN/PP/KP knowledge graph |
+| `deepseek_policy_edges` | Script 05 | 856 | Relasi hierarki |
+| `deepseek_policy_kl_assignments` | Script 08 | 534 | Penugasan K/L per KP |
 | `ddac_anomaly_2026` | Script 10/11 | 7.235 | Keselarasan DIPA vs RPJMN/RKP; 1.546 item dengan reasoning TreasurAI oss120b |
 | `ddac_coherence_2026` | Script 12/13/15 | 1.504.455 | Koherensi internal 3 level; 19,235 baris dengan reasoning TreasurAI oss120b |
 | `ddac_coherence_akun_2026` | Script 13 | ~8.000 | Detail peer komposisi akun L3 |

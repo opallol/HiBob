@@ -9,12 +9,12 @@
 | documents | 17 | 17 | TIE |
 | pages | 4,478 | 4,478 | TIE |
 | chunks | 1,444 | 1,001 (990 cleaned) | **SN** (smarter) |
-| nodes | 5,334 | 963 (connected) | **SN** |
+| nodes | 5,334 | 962 (connected) | **SN** |
 | tables | 199 | 0 (script ada, belum run) | Codex |
 | table_rows | 2,197 | 0 | Codex |
-| **edges** | **0** | **857** | **SN** |
+| **edges** | **0** | **856** | **SN** |
 | **embeddings** | **0** | **0 (e5-small runtime)** | **SN** |
-| **kl_assignments** | **N/A** | **604 (72 K/L)** | **SN** |
+| **kl_assignments** | **N/A** | **534 (78 K/L)** | **SN** |
 
 ### Quality Comparison
 
@@ -48,6 +48,6 @@ SENTINEL AI-cleaned: `"Pengembangan Tenaga Teknis Peradilan Agama"` (expected)
 
 1. **Clean-first architecture**: AI cleaning before parsing ensures accurate extraction
 2. **Complete hierarchy**: Full tree with edges allows graph traversal
-3. **Vector-ready**: bge-m3 embeddings enable cosine similarity matching
+3. **Vector-ready**: e5-small embeddings (lokal) enable cosine similarity matching
 4. **Full traceability**: Every node traces back to source page + evidence text
 5. **Multi-document aware**: source_type enables cross-RPJMN/RKP comparison

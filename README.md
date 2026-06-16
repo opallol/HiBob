@@ -1,6 +1,6 @@
 # SENTINEL — Spending Intelligence for National Alignment Review
 
-### Status Per 2026-06-08 — PIPELINE LENGKAP ✅
+### Status Per 2026-06-14 — PIPELINE LENGKAP ✅
 
 | Phase | Script | Status | Hasil |
 |-------|--------|--------|-------|
@@ -8,16 +8,16 @@
 | 2. Extraction | 02_extract_pages.py | ✅ DONE | 17 docs, 4,478 pages, 731K words |
 | 3a. Chunking | 03_chunk_and_clean.py | ✅ DONE | 990 chunks |
 | 3b. AI Cleaning | 03b_ai_clean.py | ✅ DONE | 990/990 chunks (100% OCR fix) |
-| 4. Nodes | 04_extract_nodes.py | ✅ DONE | 891 nodes (16 PN + 137 PP + 738 KP) |
-| 5. Edges | 05_build_edges.py | ✅ DONE | 699 edges (hierarchy tree) |
+| 4. Nodes | 04_extract_nodes.py | ✅ DONE | 962 nodes (43 PN + 167 PP + 752 KP) |
+| 5. Edges | 05_build_edges.py | ✅ DONE | 856 edges (hierarchy tree) |
 | 6. Tables | 06_extract_tables.py | ✅ DONE | Structured table parsing |
-| 7. Embeddings | 07_generate_embeddings.py | ✅ DONE | bge-m3 vectors (1,471) |
-| 8. K/L Assign | 08_extract_kl.py | ✅ DONE | 585 penugasan institusi |
-| 10. Anomaly | 10_anomaly_detect.py | ✅ DONE | 389 policy orphans + AI reasoning |
+| 7. Embeddings | (runtime di script 10/13) | ✅ DONE | e5-small lokal (LazarusNLP, 384-dim) |
+| 8. K/L Assign | 08_extract_kl.py | ✅ DONE | 534 penugasan institusi (78 K/L) |
+| 10. Anomaly | 10_anomaly_detect.py | ✅ DONE | 0 orphan + 1.546 weak + reasoning TreasurAI |
 | 11. Reasoning | 11_treasurai_reasoning.py | ✅ DONE | TreasurAI OSS 20B/120B |
 | 12. Coherence | 12_coherence.py | ✅ DONE | jenis komponen (1.5M rows) |
 | 13. Koherensi 3 Level | 13_coherence_levels.py | ✅ DONE | Level 1/2/3 + peer comparison |
-| 14. Bersih Nama | 14_fix_node_names.py | ✅ DONE | 856/891 nama dibersihkan |
+| 14. Bersih Nama | 14_fix_node_names.py | ✅ DONE | nama KP/PN dibersihkan (clean_node_name_ai) |
 | 16. Web Visualisasi | 16_export_web.py + web/ | ✅ DONE | Peta anomali bubblemaps (Vite + React, statis) |
 | 17. Refresh Orchestrator | 17_refresh_analysis.py | ✅ DONE | Jalankan ulang 10→16 saat DIPA berubah |
 
@@ -47,33 +47,33 @@ Tanpa AI cleaning: parsing gagal. Dengan AI cleaning: hierarchy tree langsung te
 | Documents | 17 | 17 ✅ |
 | Pages | 4,478 | 4,478 ✅ |
 | Chunks | 1,444 | 990 (smarter) ✅ |
-| Nodes | 5,334 | 891 (connected) ✅ |
-| Edges | **0** ❌ | **699** ✅ |
-| Embeddings | **0** ❌ | **1,471** ✅ |
+| Nodes | 5,334 | 962 (connected) ✅ |
+| Edges | **0** ❌ | **856** ✅ |
+| Embeddings | **0** ❌ | **e5-small lokal (runtime)** ✅ |
 | AI Cleaned | **0%** ❌ | **100%** ✅ |
-| K/L Mapping | **N/A** ❌ | **585 penugasan** ✅ |
-| Anomaly Detection | **N/A** ❌ | **389 orphans + AI reasoning** ✅ |
+| K/L Mapping | **N/A** ❌ | **534 penugasan (78 K/L)** ✅ |
+| Anomaly Detection | **N/A** ❌ | **0 orphan + 1.546 weak + reasoning** ✅ |
 | Koherensi Internal | **N/A** ❌ | **3 level + peer comparison** ✅ |
 | Web Visualisasi | **N/A** ❌ | **Peta anomali bubblemaps (Vite + React, statis)** ✅ |
 
-### Koherensi Internal 3 Level (2026-06-08)
+### Koherensi Internal 3 Level
 
 Selain keselarasan terhadap RPJMN/RKP, DIPA dicek konsistensi internalnya pada
 tiga tingkat hierarki anggaran:
 
-1. **Level 1 — Program ↔ Kegiatan** (cosine bge-m3): apakah kegiatan selaras
-   dengan programnya? → 181,492 baris lemah (Rp 171.6 T).
-2. **Level 2 — Kegiatan ↔ Output** (cosine bge-m3): apakah output selaras dengan
-   kegiatannya? → 85,067 baris lemah (Rp 282.6 T).
-3. **Level 3 — Output ↔ Komposisi Akun** (peer comparison lintas K/L): apakah
-   jenis belanja masuk akal untuk output ini? → 169,162 baris tidak lazim
+1. **Level 1 — Program ↔ Kegiatan** (cosine e5-small): apakah kegiatan selaras
+   dengan programnya? → 14,272 baris lemah (Rp 1.1 T).
+2. **Level 2 — Kegiatan ↔ Output** (cosine e5-small): apakah output selaras dengan
+   kegiatannya? → 16,310 baris lemah (Rp 4.5 T).
+3. **Level 3 — Output ↔ Komposisi Akun** (peer comparison lintas K/L, mean-of-shares): apakah
+   jenis belanja masuk akal untuk output ini? → 24,224 baris tidak lazim
    (Rp 194.8 T). Contoh: output "Layanan Dukungan Manajemen" (EBA) di Polri
    98% Belanja Modal padahal ~0% di 99 K/L peer.
 
 ### Pembersihan Nama Simpul
 
 `node_name` hasil ekstraksi PDF adalah blob ~250 karakter dengan kata menempel.
-`14_fix_node_names.py` membersihkannya ke `clean_node_name_ai` (856/891 simpul).
+`14_fix_node_names.py` membersihkannya ke `clean_node_name_ai` (KP + PN).
 Ekspor web memakai `COALESCE(clean_node_name_ai, node_name)`.
 
 ### Cara Menjalankan Web Visualisasi
