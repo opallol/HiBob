@@ -90,6 +90,10 @@ class Settings(BaseSettings):
     # Hard daily ceiling in USD for cloud calls. Breach -> pause + require approval.
     daily_budget_usd: float = 5.00
 
+    # --- Observability & evals (Phase 6, ADR 0008/0009/0012) ---
+    eval_pass_threshold: float = 0.9    # quality gate pass_rate floor (doc 09 §6)
+    router_bandit_epsilon: float = 0.0  # learned-router exploration; 0 = deterministic (off)
+
     # --- Observability (ai-stack Phoenix) ---
     otlp_endpoint: str | None = "http://localhost:4317"  # set to None to disable tracing
     service_name: str = "hibob-core"
