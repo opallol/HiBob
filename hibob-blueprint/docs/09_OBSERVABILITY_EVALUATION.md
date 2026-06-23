@@ -1,6 +1,8 @@
 # Hibob Observability & Evaluation
 
-Status: Draft matang v0.1
+Status: Draft matang v0.1 - eval harness implemented (Phase 6 ✅): suite `tool_policy_eval` rule-based
+jalan via `../backend/hibob_core/evals/` + endpoint `/v1/evals/*`. Replay (ADR 0008), eval-judge pin
+(ADR 0009), learned-router bandit (ADR 0012) = seam murni; LLM-judge/replay-dry-run/bandit-live menyusul.
 
 ## 1. Why this matters
 

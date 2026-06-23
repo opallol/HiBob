@@ -1,6 +1,6 @@
 # Hibob Roadmap
 
-Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-5 selesai; rencana diperluas s/d Phase 9: multimodal output + voice)
+Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-6 selesai; rencana diperluas s/d Phase 9: multimodal output + voice)
 
 **Legenda status:** ✅ selesai (kode + unit test) · 🚧 sedang dikerjakan · ⏳ planned.
 Catatan: gate eval berbasis DeepEval (kriteria exit yang menyebut "eval pass") baru punya
@@ -229,7 +229,12 @@ Exit criteria:
 - Tests/evals run sebelum merge.
 - Tidak ada satu pun self-build patch yang merge tanpa lewat gate ADR 0013, berapa pun kecil diff-nya.
 
-## Phase 6 - Observability & Regression Quality ⏳
+## Phase 6 - Observability & Regression Quality ✅
+
+> v0.1 ship: eval harness rule-based jalan (suite `tool_policy_eval` memvalidasi Policy Engine) +
+> `eval_runs`/`eval_results` + pass_rate. **Menutup utang Phase 5**: merge gate `eval_passed` kini bisa
+> diisi `run_suite`. Seam berikutnya: LLM-judge nyata (pin + agreement sudah ada), Replay dry-run model
+> (diff/record sudah ada), learned-router bandit di-wire ke router live (default epsilon=0).
 
 Goal: kualitas Hibob bisa dilacak dan ditingkatkan.
 

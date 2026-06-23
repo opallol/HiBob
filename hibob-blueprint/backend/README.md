@@ -1,8 +1,8 @@
- # Hibob Core — Backend (Phase 1 + 2 + 2.5 + 3 + 3.5 + 3.7 + 4 + 5)  
+ # Hibob Core — Backend (Phase 1 + 2 + 2.5 + 3 + 3.5 + 3.7 + 4 + 5 + 6)  
 
 The FastAPI modular monolith that owns Hibob's identity, conversation, model routing,
-cost governance, memory, knowledge base, reflection, multimodal input, the tool gateway, and the
-self-building safety gate. Implemented so far against `docs/11_ROADMAP.md`:
+cost governance, memory, knowledge base, reflection, multimodal input, the tool gateway, the
+self-building safety gate, and the eval harness. Implemented so far against `docs/11_ROADMAP.md`:
 
 - **Phase 1 — Core Minimal** ✅ : Bob can chat, messages persist, local/cloud models are
   selectable, and **no cloud call passes without a cost-ceiling check** (ADR 0012).
@@ -32,6 +32,11 @@ self-building safety gate. Implemented so far against `docs/11_ROADMAP.md`:
   (`propose_blueprint_update`, `draft_patch`, `create_github_issue_draft`) are `tool_run`s through the
   same gateway, with **dynamic risk by touched files** (security/policy/schema → always high, never
   auto, ADR 0013) and a **merge gate** (tests→eval→docs→approval). Draft-only; nothing auto-merges.
+- **Phase 6 — Observability & Regression Quality** ✅ : a rule-based **eval harness** — the
+  `tool_policy_eval` suite validates the Policy Engine deterministically; `run_suite` records
+  `eval_runs`/`eval_results` + pass_rate (this is what the Phase 5 gate's `eval_passed` consumes).
+  Replay diff/record (ADR 0008), pinned eval judge + agreement (ADR 0009), and an epsilon-greedy
+  learned-router bias (ADR 0012, default off) ship as pure seams.
 
 Everything else (sandbox runtime, credential vault, multimodal **output**, Hermes) is intentionally
 **not** here yet — see "Module map" for the reserved seams.
@@ -55,6 +60,9 @@ Everything else (sandbox runtime, credential vault, multimodal **output**, Herme
 - `POST /v1/selfbuild/check-merge` — the Phase 5 merge gate (ADR 0013): returns `ready`/`missing`
   for tests→eval→docs→approval (and replay when the change touches logic). Self-build proposals are
   requested via `/v1/tools/{name}/request`.
+- `GET /v1/evals/suites` · `POST /v1/evals/{suite}/run` · `GET /v1/evals/runs/{id}` ·
+  `GET /v1/evals/judge` — the Phase 6 eval harness (doc 09). `run` returns a pass_rate from
+  deterministic metrics; `judge` returns the pinned eval-judge version (ADR 0009).
 - `POST /v1/memory/candidates` · `POST /v1/memory/summarize` · `GET /v1/memory/search` ·
   `GET /v1/memory/{id}` · `POST /v1/memory/{id}/{approve|reject|supersede}` — the Phase 2
   memory lifecycle (doc 13 §4). Approval is human-only; nothing auto-promotes a candidate.
@@ -84,6 +92,7 @@ hibob_core/
   tools/       Tool Gateway (Phase 4): registry, builtins, gateway (request->policy->approve->execute)
   policy/      Policy Engine (Phase 4, ADR 0005): deterministic decide() + injection provenance
   selfbuild/   Self-building gate (Phase 5, ADR 0013): change-risk classifier, merge gate, proposal tools
+  evals/       Eval harness (Phase 6): metrics, runner, replay (0008), judge (0009), router bandit (0012)
   cost/        cost circuit breaker (ADR 0012)
   audit/       audit log helper
   db/          asyncpg pool, repositories, migrations/ (0001 P1 .. 0006 P3.5, 0007 P4)
@@ -172,6 +181,9 @@ uv run uvicorn hibob_core.api.app:app --reload --port 8088
 - `test_tool_gateway.py` — low→execute+trust↑, high→pending_approval (no exec), critical→deny, approve→executes.
 - `test_selfbuild_classifier.py` / `test_selfbuild_gate.py` / `test_selfbuild_gateway.py` — sensitive
   paths force high (never auto), merge-gate ordering, self-build proposal risk through the gateway (ADR 0013).
+- `test_evals_metrics.py` / `test_evals_runner.py` — deterministic metrics + suite run pass_rate (Phase 6).
+- `test_replay.py` / `test_eval_judge.py` / `test_router_bandit.py` — replay diff/compare, judge
+  agreement, epsilon-greedy selection (ADR 0008/0009/0012).
 
 Run them with `uv run pytest` (see "Local dev" — `uv sync` pulls the deps; the suite needs no DB/model).
 The heavy RAG parsers (Unstructured/Crawl4AI) are an optional extra — `uv pip install -e ".[ingest]"` —
@@ -190,4 +202,5 @@ docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrat
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0005_phase3.sql
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0006_phase3_5.sql
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0007_phase4.sql
+docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0008_phase6.sql
 ```

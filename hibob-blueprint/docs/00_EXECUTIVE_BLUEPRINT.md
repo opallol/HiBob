@@ -1,6 +1,6 @@
 # Hibob Executive Blueprint
 
-Status: Blueprint v0.1 - eksekusi berjalan (Phase 1-5 selesai; lihat `11_ROADMAP.md`)
+Status: Blueprint v0.1 - eksekusi berjalan (Phase 1-6 selesai; lihat `11_ROADMAP.md`)
 Tanggal baseline: 2026-06-23
 
 ## 1. Ringkasan satu kalimat
