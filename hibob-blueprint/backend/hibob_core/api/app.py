@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from hibob_core.api import chat, documents, memory
+from hibob_core.api import chat, documents, memory, reflections
 from hibob_core.db.pool import close_pool, get_pool, init_pool
 from hibob_core.knowledge import vector_store as doc_vector_store
 from hibob_core.memory import service as memory_service
@@ -36,6 +36,7 @@ app = FastAPI(title="Hibob Core", version="0.1.0", lifespan=lifespan)
 app.include_router(chat.router, prefix="/v1")
 app.include_router(memory.router, prefix="/v1")
 app.include_router(documents.router, prefix="/v1")
+app.include_router(reflections.router, prefix="/v1")
 
 
 @app.get("/healthz")

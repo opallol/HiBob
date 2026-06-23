@@ -474,6 +474,8 @@ CREATE TABLE reflections (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE INDEX idx_reflections_user_status ON reflections(user_id, status);
+
 -- ADR 0011 - Ephemeral OS-Level Sandbox for Tool Execution
 CREATE TABLE sandbox_runs (
     id UUID PRIMARY KEY,

@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     calib_cap: float = 0.99             # ...nor above (can't imply auto-promotion)
     calib_review_threshold: float = 0.30  # below -> flag for weekly review (§11), not archive
 
+    # --- Reflective sibling (Phase 3.5, ADR 0010) ---
+    reflection_low_confidence: float = 0.4  # depends_on target below this = fragile assumption
+    reflection_stale_days: int = 30         # web source not recrawled within = stale (doc 06 §13)
+    reflection_max_findings: int = 20       # cap per run, anti-noise (ADR 0010)
+
     # --- Cost circuit breaker (ADR 0012) ---
     # Hard daily ceiling in USD for cloud calls. Breach -> pause + require approval.
     daily_budget_usd: float = 5.00
