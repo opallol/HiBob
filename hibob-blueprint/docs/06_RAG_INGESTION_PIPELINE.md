@@ -19,7 +19,8 @@ v0.1:
 Future:
 
 - Gmail/Calendar/Drive/Notion.
-- Audio transcript.
+- Audio transcript (STT) dan gambar (vision/caption) - dijadwalkan di Phase 3.7 "Multimodal Input"
+  (lihat `11_ROADMAP.md`): hasil transkrip/caption masuk pipeline ingestion yang sama, bukan jalur khusus.
 - Browser session capture.
 - Codebase semantic index.
 

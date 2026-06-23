@@ -1,6 +1,6 @@
 # Hibob Roadmap
 
-Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-2.5 selesai)
+Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-2.5 selesai; rencana diperluas s/d Phase 9: multimodal input/output + voice)
 
 **Legenda status:** ✅ selesai (kode + unit test) · 🚧 sedang dikerjakan · ⏳ planned.
 Catatan: gate eval berbasis DeepEval (kriteria exit yang menyebut "eval pass") baru punya
@@ -95,6 +95,10 @@ Exit criteria:
 
 Goal: Hibob bisa membaca dokumen dan web.
 
+> Ruang lingkup v0.1 ini **ekstraksi teks saja** (PDF/DOCX/MD/TXT via Unstructured, web via
+> Crawl4AI). Memahami **gambar (vision)** dan **audio (transkrip/STT)** sebagai input pindah ke
+> Phase 3.7 - Multimodal Input. Menghasilkan output non-teks (gambar/suara) ada di Phase 9.
+
 Deliverables:
 
 - document upload/register,
@@ -127,9 +131,50 @@ Exit criteria:
 - Reflection tidak pernah menulis durable memory atau memanggil tool langsung - hanya mengusulkan kandidat lewat pipeline approval yang sudah ada.
 - `reflection signal precision` (doc 09 §7) terlacak.
 
+## Phase 3.7 - Multimodal Input (memahami gambar & suara) ⏳
+
+Goal: Hibob bisa **mengerti** input non-teks - gambar dan audio - bukan cuma membacanya sebagai
+file. Ditaruh di sini (tepat setelah RAG, sebelum Tool Gateway) karena bersandar pada pipeline
+ingestion/retrieval Phase 3, tapi tetap menghormati golden rule: core + memory + RAG dulu.
+
+Lingkup yang dibuka: kirim foto/screenshot/diagram lalu Hibob menjelaskannya; kirim voice note
+lalu Hibob memahami isinya. Ini **input understanding** - menghasilkan gambar/suara ada di Phase 9.
+
+Deliverables:
+
+- Perluas kontrak `/v1/chat`: terima lampiran (`attachments: [{type: image|audio, ...}]`) di samping
+  `message` teks; perluas `messages` adapter dari `content: str` menjadi blok multimodal
+  (text + image) - seam-nya sudah ada di `models/base.py` dan flag `vision/audio` di doc 12 §2.
+- Adapter vision: model multimodal lokal (mis. via Ollama) sebagai default; cloud vision (Claude)
+  hanya untuk tier non-private/secret. Routing privacy tetap berlaku - gambar/audio `private`/`secret`
+  tidak pernah ke cloud (doc 08 §4), sama seperti aturan teks.
+- Adapter audio (STT): transkripsi lokal (mis. Whisper) → teks; teks hasil transkrip masuk jalur
+  yang sudah ada (memory/RAG), bukan jalur khusus.
+- Ingestion multimodal: gambar/audio bisa di-register sebagai source (memperluas doc 06; "Audio
+  transcript" yang tadinya *Future* jadi terjadwal di sini) dan masuk knowledge base lewat
+  caption/transkrip + embedding.
+- Penyimpanan aman: berkas mentah disimpan dengan privacy tier + sensitivity, tidak pernah bocor
+  ke trace/log; biaya inferensi cloud tetap lewat cost circuit breaker (ADR 0012).
+- ADR baru saat fase dimulai: **multimodal routing & safety** (model mana untuk modality mana,
+  containment privacy untuk piksel/audio, prompt-injection lewat gambar).
+
+Exit criteria:
+
+- Bob kirim 1 gambar → Hibob menjawab tentang isinya dengan benar; kirim 1 voice note → Hibob
+  memahami maksudnya.
+- Tidak ada satu pun gambar/audio `private`/`secret` yang lolos ke cloud.
+- Tidak ada nilai biner mentah (piksel/sample audio) yang tercatat di trace/log.
+- `multimodal_input_eval` awal (vision QA + STT accuracy) pass.
+
 ## Phase 4 - Tool Gateway ⏳
 
 Goal: Hibob bisa memakai tools dengan izin.
+
+> Ini fondasi **"aksi selain teks"**: di sinilah Hibob mulai *melakukan* sesuatu (bukan cuma
+> menjawab) - baca repo, jalankan internal tool, draft patch - semuanya lewat permission +
+> Policy Engine + audit. Aksi yang lebih aktif (browser/automation) di Phase 7; menghasilkan
+> output non-teks (gambar/suara) di Phase 9. Tiap penyedia image-gen/TTS nantinya didaftarkan
+> sebagai tool dan tunduk pada gateway ini.
 
 Deliverables:
 
@@ -230,18 +275,48 @@ Deliverables:
 - reflection lintas-sesi yang lebih dalam (dasar sudah jalan sejak Phase 3.5, ADR 0010 - di sini ditingkatkan ke horizon waktu lebih panjang),
 - advanced project management,
 - repo/code semantic search,
-- optional voice,
 - custom UI.
+
+(Voice & output non-teks tidak lagi "optional" di sini - dipindah ke Phase 9 yang berdiri sendiri.)
 
 Exit criteria:
 
 - Hibob membantu planning, coding, knowledge, and reflection.
 - Bob menggunakan Hibob sebagai sistem harian.
 
+## Phase 9 - Multimodal Output & Interactive Voice ⏳
+
+Goal: Hibob bisa **menghasilkan** hal selain teks dan diajak ngobrol suara dua arah. Ditaruh paling
+akhir karena outward-facing dan bersandar penuh pada pengaman yang dibangun lebih dulu: Tool Gateway
++ Policy Engine (Phase 4), Sandbox (ADR 0011), Credential Vault (ADR 0014), dan cost circuit breaker
+(ADR 0012). Tanpa fondasi itu, output generatif + voice realtime adalah pengali dari nol.
+
+Lingkup: pemahaman input gambar/audio sudah ada sejak Phase 3.7; fase ini menambah sisi **output**
+dan **interaksi suara**.
+
+Deliverables:
+
+- Image generation sebagai tool: penyedia gen-gambar didaftarkan di Tool Gateway, tunduk policy +
+  cost breaker + audit; hasil tidak pernah auto-publish, hanya disodorkan ke Bob.
+- TTS (text-to-speech): Hibob bisa "bersuara" - output audio dari jawaban teks, lokal-first.
+- Voice interaktif dua arah: STT masuk (reuse adapter audio Phase 3.7) + TTS keluar sebagai mode
+  percakapan; push-to-talk dulu, bukan always-listening.
+- Kontrak respons `/v1/chat` diperluas membawa artefak non-teks (referensi gambar/audio yang
+  dihasilkan), bukan hanya `response` teks.
+- ADR baru saat fase dimulai: **multimodal output & voice safety** (consent perekaman audio,
+  watermark/limit gambar, biaya, containment privacy untuk artefak yang dihasilkan).
+
+Exit criteria:
+
+- Bob minta gambar → Hibob menghasilkannya lewat tool ber-policy, dengan audit, tanpa auto-publish.
+- Bob bisa ngobrol suara (ngomong → Hibob paham → Hibob menjawab dengan suara).
+- Tidak ada artefak `private`/`secret` yang dihasilkan via penyedia cloud yang dilarang tier-nya.
+- Voice realtime hanya push-to-talk + perekaman dengan consent eksplisit; nol audio terekam diam-diam.
+
 ## Things intentionally delayed
 
 - avatar,
-- realtime voice,
+- always-listening / wake-word voice (Phase 9 hanya push-to-talk),
 - mobile app,
 - autonomous web write,
 - email/calendar write,
