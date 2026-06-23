@@ -4,6 +4,7 @@ The loop is deliberately small and grows by phase:
   Phase 1: assemble persona -> route model -> (cost gate if cloud) -> generate -> persist.
   Phase 2: memory recall is folded into context assembly (doc 04 §8).
   Phase 2.5: memories actually used are fed back as `used` calibration signals (ADR 0007).
+  Phase 3: document chunks are recalled too, with source references (doc 06 §9/§10).
 No tools / no multi-step agent loop yet - that arrives with the Tool Gateway (Phase 4).
 
 THE HERMES SEAM
@@ -31,6 +32,7 @@ import asyncpg
 from hibob_core.cost import breaker
 from hibob_core.db import repositories as repo
 from hibob_core.identity import persona
+from hibob_core.knowledge import retrieval as doc_retrieval
 from hibob_core.memory import calibration, retrieval
 from hibob_core.models.router import ModelRouter
 
@@ -42,7 +44,7 @@ class ChatOutcome:
     response: str
     trace_id: str | None
     used_memory_ids: list[str] = field(default_factory=list)          # populated since Phase 2
-    used_document_chunk_ids: list[str] = field(default_factory=list)  # empty until Phase 3 (RAG)
+    used_document_chunk_ids: list[str] = field(default_factory=list)  # populated since Phase 3 (RAG)
     tool_run_ids: list[str] = field(default_factory=list)             # empty until Phase 4 (tools)
 
 
@@ -82,6 +84,19 @@ class Orchestrator:
                 used_memory_ids = [m["id"] for m in memories]
         except Exception:
             memories = []
+
+        # Knowledge recall (Phase 3): retrieve relevant document chunks and add as context with
+        # source references (doc 06 §9/§10). Same privacy containment as memory; degrade gracefully.
+        used_document_chunk_ids: list[str] = []
+        try:
+            chunks = await doc_retrieval.retrieve(
+                conn, self.router, query=user_message, privacy_tier=privacy_tier
+            )
+            if chunks:
+                system = system + "\n\n" + doc_retrieval.render_for_prompt(chunks)
+                used_document_chunk_ids = [c["chunk_id"] for c in chunks]
+        except Exception:
+            pass
 
         history = await repo.get_history(conn, conversation_id)  # includes the new user turn
 
@@ -145,4 +160,5 @@ class Orchestrator:
             response=result.text,
             trace_id=trace_id,
             used_memory_ids=used_memory_ids,
+            used_document_chunk_ids=used_document_chunk_ids,
         )

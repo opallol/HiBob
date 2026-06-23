@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     w_recency: float = 0.10
     w_source: float = 0.10
 
+    # --- Knowledge base / RAG (Phase 3, doc 06) ---
+    documents_collection: str = "hibob_documents"  # separate Qdrant collection (doc 06 §15)
+    chunk_target_tokens: int = 700        # within doc 06 §7 range (500-900)
+    chunk_overlap_tokens: int = 120       # within doc 06 §7 range (80-150)
+    chunk_min_chars: int = 20             # ingestion quality gate (doc 06 §11): skip empty chunks
+    doc_retrieval_top_k: int = 6
+    doc_retrieval_candidate_k: int = 24   # Qdrant fetch before privacy/metadata filtering
+    crawl_allowlist: list[str] = Field(default_factory=list)  # web ingest: allowlist-only (doc 06 §6.2)
+
     # --- Memory graph & calibration (Phase 2.5, ADR 0006/0007) ---
     graph_max_depth: int = 5            # recursive-CTE traversal cap (doc 04 §9a)
     calib_alpha0: float = 1.0           # Beta prior - positive evidence

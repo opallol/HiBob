@@ -21,6 +21,12 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
 ]
+# Phase 3 RAG: heavy parsers, intentionally optional so core install/tests stay light.
+# Lazy-imported in hibob_core/knowledge/parsers.py; text/markdown work without these.
+ingest = [
+    "unstructured>=0.15",
+    "crawl4ai>=0.3",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

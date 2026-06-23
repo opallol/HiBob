@@ -181,6 +181,11 @@ CREATE TABLE document_chunks (
     UNIQUE(document_id, chunk_index)
 );
 
+-- Phase 3 (RAG) lookup indexes
+CREATE INDEX idx_documents_user_status ON documents(user_id, status);
+CREATE INDEX idx_documents_privacy ON documents(privacy_tier);
+CREATE INDEX idx_document_chunks_document ON document_chunks(document_id);
+
 CREATE TABLE document_embeddings (
     id UUID PRIMARY KEY,
     chunk_id UUID REFERENCES document_chunks(id),
