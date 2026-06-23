@@ -24,7 +24,7 @@ Project DDAC / DeepSeek KMS yang sedang dianalisis.
 
 Blueprint arsitektur HiBob: AI saudara digital, second brain, agent operator, memory core, model routing, policy, dan tool gateway.
 
-Bukan lagi sekadar dokumen — backend `hibob_core` sudah berjalan: **Phase 1 (Core)** dan **Phase 2 (Memory Core)** selesai, **Phase 2.5 (Memory Graph & Calibration)** aktif. Lihat `hibob-blueprint/backend/README.md` untuk cara menjalankan dan `hibob-blueprint/docs/11_ROADMAP.md` untuk status per fase.
+Bukan lagi sekadar dokumen — backend `hibob_core` sudah berjalan: **Phase 1-3 selesai** (Core, Memory Core, Memory Graph & Calibration, Knowledge Base/RAG). Lihat `hibob-blueprint/backend/README.md` untuk cara menjalankan dan `hibob-blueprint/docs/11_ROADMAP.md` untuk status per fase.
 
 ### `hello_world`
 

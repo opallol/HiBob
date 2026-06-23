@@ -1,6 +1,8 @@
 # Hibob RAG & Ingestion Pipeline
 
-Status: Draft matang v0.1
+Status: Draft matang v0.1 - implemented (Phase 3 ✅). v0.1 ekstraksi teks: Markdown/TXT natif,
+PDF/DOCX via Unstructured + web via Crawl4AI sebagai adapter opsional (lazy import). Lihat
+`../backend/hibob_core/knowledge/` dan `11_ROADMAP.md`.
 
 ## 1. Tujuan
 

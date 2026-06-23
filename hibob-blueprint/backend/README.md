@@ -1,7 +1,7 @@
- # Hibob Core — Backend (Phase 1 + 2 + 2.5)  
+ # Hibob Core — Backend (Phase 1 + 2 + 2.5 + 3)  
 
 The FastAPI modular monolith that owns Hibob's identity, conversation, model routing,
-cost governance, and memory. Implemented so far against `docs/11_ROADMAP.md`:
+cost governance, memory, and knowledge base. Implemented so far against `docs/11_ROADMAP.md`:
 
 - **Phase 1 — Core Minimal** ✅ : Bob can chat, messages persist, local/cloud models are
   selectable, and **no cloud call passes without a cost-ceiling check** (ADR 0012).
@@ -10,16 +10,22 @@ cost governance, and memory. Implemented so far against `docs/11_ROADMAP.md`:
 - **Phase 2.5 — Memory Graph & Calibration** ✅ : typed `memory_edges` (ADR 0006) with
   recursive-CTE traversal, and self-calibrating confidence via `memory_usage_feedback`
   (ADR 0007) — calibration moves `confidence` only, **never** `status`.
+- **Phase 3 — Knowledge Base / RAG** ✅ : document/web ingestion → chunking → local embedding →
+  Qdrant, and source-referenced retrieval wired into chat (doc 06). v0.1 is **text extraction
+  only** (Markdown/TXT native; PDF/DOCX via Unstructured, web via Crawl4AI as optional adapters).
 
-Everything else (RAG, tools, policy engine, sandbox, reflection, Hermes) is intentionally
+Everything else (tools, policy engine, sandbox, reflection, multimodal, Hermes) is intentionally
 **not** here yet — see "Module map" for the reserved seams.
 
 ## What's implemented
 
-- `POST /v1/chat` — chat with Hibob; recalls relevant approved memory, persists the turn,
-  routes a model, returns trace IDs + `used_memory_ids` (doc 13 §3). Used memories get a
-  `used` calibration signal (ADR 0007). Document/tool fields are present but still empty.
+- `POST /v1/chat` — chat with Hibob; recalls relevant approved memory **and document chunks**,
+  persists the turn, routes a model, returns trace IDs + `used_memory_ids` +
+  `used_document_chunk_ids` (doc 13 §3). Used memories get a `used` calibration signal (ADR 0007).
 - `GET /v1/conversations/{id}` — conversation metadata + messages.
+- `POST /v1/documents/register` · `POST /v1/documents/{id}/ingest` · `GET /v1/documents/search` ·
+  `GET /v1/ingestion-jobs/{id}` — the Phase 3 knowledge surface (doc 13 §5). Embedding is local,
+  so `private`/`secret` documents never leave the machine; retrieval applies privacy containment.
 - `POST /v1/memory/candidates` · `POST /v1/memory/summarize` · `GET /v1/memory/search` ·
   `GET /v1/memory/{id}` · `POST /v1/memory/{id}/{approve|reject|supersede}` — the Phase 2
   memory lifecycle (doc 13 §4). Approval is human-only; nothing auto-promotes a candidate.
@@ -37,15 +43,16 @@ Everything else (RAG, tools, policy engine, sandbox, reflection, Hermes) is inte
 
 ```
 hibob_core/
-  api/         FastAPI app + /v1 routes (chat + memory)
+  api/         FastAPI app + /v1 routes (chat + memory + documents)
   identity/    persona/system-prompt assembly from persona_rules
   models/      ModelAdapter ABC + ollama/anthropic adapters + static router   <-- model-agnostic seam
-  agents/      orchestrator: persona -> recall -> route -> generate -> persist <-- HERMES SEAM
+  agents/      orchestrator: persona -> recall (memory+docs) -> route -> generate -> persist <-- HERMES SEAM
   memory/      extraction, approval service, hybrid retrieval, vector_store,
                summary, graph (ADR 0006), calibration (ADR 0007)
+  knowledge/   RAG (Phase 3): parsers, chunking, ingestion, vector_store, retrieval (doc 06)
   cost/        cost circuit breaker (ADR 0012)
   audit/       audit log helper
-  db/          asyncpg pool, repositories, migrations/ (0001 Phase 1, 0003 Phase 2, 0004 Phase 2.5)
+  db/          asyncpg pool, repositories, migrations/ (0001 P1, 0003 P2, 0004 P2.5, 0005 P3)
   tools/       STUB — Tool Gateway (Phase 4)
   policy/      STUB — Policy Engine (Phase 4, ADR 0005)
   telemetry.py OTLP → Phoenix
@@ -120,8 +127,13 @@ uv run uvicorn hibob_core.api.app:app --reload --port 8088
 - `test_memory_retrieval.py` — privacy containment (no leak up-tier) + conflict suppression.
 - `test_memory_graph.py` — typed-edge validation, traversal assembly, auto-`supersedes` edge (ADR 0006).
 - `test_memory_calibration.py` — Beta posterior moves confidence, clamped, and never touches `status` (ADR 0007).
+- `test_knowledge_chunking.py` — heading-aware markdown split, sizing/overlap, stable hashes (doc 06 §7).
+- `test_knowledge_retrieval.py` — document privacy containment + source-referenced results (doc 06 §4/§9).
+- `test_knowledge_ingestion.py` — pending→active pipeline, quality gate fails empty docs, job/embedding recorded.
 
 Run them with `uv run pytest` (see "Local dev" — `uv sync` pulls the deps; the suite needs no DB/model).
+The heavy RAG parsers (Unstructured/Crawl4AI) are an optional extra — `uv pip install -e ".[ingest]"` —
+and lazy-imported; text/markdown ingestion and the whole test suite work without them.
 
 ## Applying migrations
 
@@ -131,4 +143,5 @@ on first init. Apply later migrations by hand (idempotent — safe to re-run):
 ```bash
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0003_phase2.sql
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0004_phase2_5.sql
+docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0005_phase3.sql
 ```

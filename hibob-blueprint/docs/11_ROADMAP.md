@@ -1,6 +1,6 @@
 # Hibob Roadmap
 
-Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-2.5 selesai; rencana diperluas s/d Phase 9: multimodal input/output + voice)
+Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-3 selesai; rencana diperluas s/d Phase 9: multimodal input/output + voice)
 
 **Legenda status:** ✅ selesai (kode + unit test) · 🚧 sedang dikerjakan · ⏳ planned.
 Catatan: gate eval berbasis DeepEval (kriteria exit yang menyebut "eval pass") baru punya
@@ -91,7 +91,7 @@ Exit criteria:
 - Memory yang berulang dikoreksi mulai turun confidence-nya secara terukur.
 - `memory_graph_calibration_eval` (doc 09 §5) pass.
 
-## Phase 3 - Knowledge Base/RAG ⏳
+## Phase 3 - Knowledge Base/RAG ✅
 
 Goal: Hibob bisa membaca dokumen dan web.
 

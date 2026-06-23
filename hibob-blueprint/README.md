@@ -1,7 +1,7 @@
 # Hibob Blueprint Documentation Pack
 
 Tanggal baseline: 2026-06-23
-Status: Implementasi berjalan - Phase 1 (Core) + Phase 2 (Memory Core) selesai; Phase 2.5 (Memory Graph & Calibration) aktif
+Status: Implementasi berjalan - Phase 1-3 selesai (Core, Memory Core, Memory Graph & Calibration, Knowledge Base/RAG)
 Pemilik konsep: Bob
 
 Paket ini adalah fondasi dokumentasi untuk membangun **Hibob** dari nol: AI saudara digital, second brain, agent operator, dan AI dev partner yang local-first, memory-first, model-agnostic, permission-controlled, serta future-proof terhadap perkembangan model AI.
@@ -13,6 +13,7 @@ Repo ini bukan lagi sekadar blueprint - backend `hibob_core` sudah berjalan. Rin
 - **Phase 1 - Core Minimal** ✅ — `/v1/chat`, persona, model router (Ollama/Anthropic), cost circuit breaker (ADR 0012), persistence, Phoenix tracing.
 - **Phase 2 - Memory Core** ✅ — extraction, approval human-only, hybrid retrieval (Qdrant + SQL) tersambung ke chat, session summary, conflict minimal.
 - **Phase 2.5 - Memory Graph & Calibration** ✅ — `memory_edges` (ADR 0006) + traversal recursive CTE, dan kalibrasi confidence via `memory_usage_feedback` (ADR 0007).
+- **Phase 3 - Knowledge Base/RAG** ✅ — ingestion dokumen/web → chunking → embedding lokal → Qdrant, dan retrieval ber-sumber tersambung ke chat (doc 06; v0.1 ekstraksi teks, PDF/DOCX/web via adapter opsional).
 
 Detail teknis & cara menjalankan ada di `backend/README.md`. Status per fase di `docs/11_ROADMAP.md`.
 
