@@ -1,0 +1,26 @@
+flowchart TD
+    Input[User Input] --> Intent[Intent Classification]
+    Intent --> Context[Retrieve Memory + Knowledge]
+    Context --> Policy[Apply Persona + Tool Policy]
+    Policy --> Plan[Plan]
+    Plan --> NeedTool{Need Tool?}
+    NeedTool -->|No| Generate[Generate Response]
+    NeedTool -->|Yes| ToolRequest[Tool Request]
+    ToolRequest --> Gateway[Tool Gateway]
+    Gateway --> Provenance[Provenance / Injection Check]
+    Provenance --> PolicyEngine[Policy Engine - policy_rules + trust_score]
+    PolicyEngine --> Approval{allow / ask / deny}
+    Approval -->|ask| AskBob[Ask Bob]
+    AskBob --> Decision{Approved?}
+    Decision -->|No| Abort[Abort/Explain]
+    Decision -->|Yes| RiskCheck{High-risk tool type?}
+    Approval -->|deny| Abort
+    Approval -->|allow| RiskCheck
+    RiskCheck -->|Yes| Sandbox[Execute in Ephemeral Sandbox]
+    RiskCheck -->|No| Execute[Execute Tool]
+    Sandbox --> Observe[Observe Result]
+    Execute --> Observe[Observe Result]
+    Observe --> Generate
+    Generate --> Trace[Trace + Audit]
+    Trace --> MemoryCandidate[Extract Memory Candidates]
+    MemoryCandidate --> Output[Final Output]
