@@ -23,6 +23,7 @@ Phase 1 does NOT build any of this - it just keeps the boundary clean so it can.
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -35,6 +36,7 @@ from hibob_core.identity import persona
 from hibob_core.knowledge import retrieval as doc_retrieval
 from hibob_core.memory import calibration, retrieval
 from hibob_core.models.router import ModelRouter
+from hibob_core.multimodal import attachments as mm, stt, vision
 
 
 @dataclass
@@ -62,8 +64,23 @@ class Orchestrator:
         privacy_tier: str,
         model_preference: str,
         trace_id: str | None,
+        attachments: list | None = None,
     ) -> ChatOutcome:
-        # Persist the user's turn first.
+        # Multimodal input (Phase 3.7): validate + split. AttachmentError propagates -> HTTP 400.
+        images, audios = mm.split(attachments or [])
+
+        # Audio -> transcript (always local). Fold into the text message so the whole downstream
+        # path (memory/doc recall, persistence) is unchanged. Degrade gracefully if STT is absent.
+        for att in audios:
+            try:
+                raw = mm.get_bytes(att)
+                transcript = await asyncio.to_thread(stt.transcribe, raw, media_type=att.media_type)
+                if transcript:
+                    user_message = (user_message + "\n" + transcript).strip()
+            except Exception:
+                pass
+
+        # Persist the user's turn first (text incl. any transcript; raw media is never persisted).
         await repo.add_message(
             conn, conversation_id=conversation_id, role="user",
             content=user_message, trace_id=trace_id,
@@ -99,6 +116,13 @@ class Orchestrator:
             pass
 
         history = await repo.get_history(conn, conversation_id)  # includes the new user turn
+
+        # Image input (Phase 3.7): rebuild the final user turn as multimodal blocks. The model
+        # router still gates by privacy_tier, so a private/secret image can never go to cloud.
+        if images and history:
+            history = history[:-1] + [
+                {"role": "user", "content": vision.build_user_blocks(user_message, images)}
+            ]
 
         adapter = self.router.route(privacy_tier=privacy_tier, model_preference=model_preference)
 
@@ -151,7 +175,8 @@ class Orchestrator:
             event_type="chat.responded", target_type="conversation",
             target_id=str(conversation_id),
             metadata={"provider": result.provider, "model": result.model,
-                      "cost_estimate": result.cost_estimate},
+                      "cost_estimate": result.cost_estimate,
+                      "n_images": len(images), "n_audio": len(audios)},
         )
 
         return ChatOutcome(

@@ -27,6 +27,11 @@ ingest = [
     "unstructured>=0.15",
     "crawl4ai>=0.3",
 ]
+# Phase 3.7 multimodal: local speech-to-text, optional + lazy (hibob_core/multimodal/stt.py).
+# Vision needs no extra dep (uses the existing model adapters).
+multimodal = [
+    "faster-whisper>=1.0",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

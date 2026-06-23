@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     # --- Local model runtime (ai-stack Ollama) ---
     ollama_base_url: str = "http://localhost:11435"
     ollama_default_model: str = "qwen3.5:9b"  # fits 8GB VRAM (see ai-stack/README.md)
+    ollama_vision_model: str = "llava:7b"     # multimodal model for image input (Phase 3.7)
 
     # --- Cloud model (Anthropic Claude) ---
     anthropic_api_key: str | None = None
@@ -56,6 +57,16 @@ class Settings(BaseSettings):
     calib_floor: float = 0.05           # confidence never calibrates below this
     calib_cap: float = 0.99             # ...nor above (can't imply auto-promotion)
     calib_review_threshold: float = 0.30  # below -> flag for weekly review (§11), not archive
+
+    # --- Multimodal input (Phase 3.7) ---
+    stt_model: str = "base"               # faster-whisper size (tiny|base|small|...)
+    multimodal_max_mb: int = 20           # per-attachment size ceiling
+    multimodal_allowed_image_types: list[str] = Field(
+        default_factory=lambda: ["image/png", "image/jpeg", "image/webp"]
+    )
+    multimodal_allowed_audio_types: list[str] = Field(
+        default_factory=lambda: ["audio/wav", "audio/mpeg", "audio/webm", "audio/mp4"]
+    )
 
     # --- Reflective sibling (Phase 3.5, ADR 0010) ---
     reflection_low_confidence: float = 0.4  # depends_on target below this = fragile assumption
