@@ -1,0 +1,24 @@
+# Secrets / credentials
+.env
+konfigurasi
+treasurai_config.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Output / logs
+output/
+*.log
+
+# audit re-run artifacts
+logs_*.txt
+rerun_done.flag
+rerun_fix_done.flag
+rerun_coh_done.flag
+rerun_coh2_done.flag
+docs/Bahan Paparan DDAC.pptx
+docs/Bahan Paparan DDAC.backup-20260615.pptx
