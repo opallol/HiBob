@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     reflection_stale_days: int = 30         # web source not recrawled within = stale (doc 06 §13)
     reflection_max_findings: int = 20       # cap per run, anti-noise (ADR 0010)
 
+    # --- Tool Gateway & Policy Engine (Phase 4, ADR 0005) ---
+    trust_auto_threshold: float = 0.8   # medium-risk tool auto-allows once trust crosses this
+    trust_increment: float = 0.1        # per successful, non-flagged run
+    repo_read_root: str = "."           # allowlist root for the read-only repo_read tool
+    tool_approval_ttl_hours: int = 24
+
     # --- Cost circuit breaker (ADR 0012) ---
     # Hard daily ceiling in USD for cloud calls. Breach -> pause + require approval.
     daily_budget_usd: float = 5.00
