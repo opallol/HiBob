@@ -1,6 +1,6 @@
 # Hibob Roadmap
 
-Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-3.7 selesai; rencana diperluas s/d Phase 9: multimodal output + voice)
+Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-4 selesai; rencana diperluas s/d Phase 9: multimodal output + voice)
 
 **Legenda status:** ✅ selesai (kode + unit test) · 🚧 sedang dikerjakan · ⏳ planned.
 Catatan: gate eval berbasis DeepEval (kriteria exit yang menyebut "eval pass") baru punya
@@ -166,7 +166,12 @@ Exit criteria:
 - Tidak ada nilai biner mentah (piksel/sample audio) yang tercatat di trace/log.
 - `multimodal_input_eval` awal (vision QA + STT accuracy) pass.
 
-## Phase 4 - Tool Gateway ⏳
+## Phase 4 - Tool Gateway ✅
+
+> v0.1 ship: Policy Engine deterministik (allow/ask/deny) + Tool Gateway + registry + approval flow
+> + trust escalation + provenance/injection flag + tool internal read-only. **Ditunda sbg seam**:
+> Ephemeral Sandbox runtime (ADR 0011) - tool `shell|browser|mcp` **default-deny** sampai sandbox ada;
+> Credential Vault (ADR 0014) - menyusul saat tool login/kirim pertama (Phase 7).
 
 Goal: Hibob bisa memakai tools dengan izin.
 

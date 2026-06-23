@@ -1,8 +1,8 @@
- # Hibob Core — Backend (Phase 1 + 2 + 2.5 + 3 + 3.5 + 3.7)  
+ # Hibob Core — Backend (Phase 1 + 2 + 2.5 + 3 + 3.5 + 3.7 + 4)  
 
 The FastAPI modular monolith that owns Hibob's identity, conversation, model routing,
-cost governance, memory, knowledge base, reflection, and multimodal input. Implemented so far
-against `docs/11_ROADMAP.md`:
+cost governance, memory, knowledge base, reflection, multimodal input, and the tool gateway.
+Implemented so far against `docs/11_ROADMAP.md`:
 
 - **Phase 1 — Core Minimal** ✅ : Bob can chat, messages persist, local/cloud models are
   selectable, and **no cloud call passes without a cost-ceiling check** (ADR 0012).
@@ -22,8 +22,14 @@ against `docs/11_ROADMAP.md`:
   transcribed locally (STT) into the text path; images become multimodal blocks the adapters
   translate per provider. Privacy still routes by tier (private/secret images stay local); raw
   media is never persisted (v0.1). Output generation/voice is Phase 9.
+- **Phase 4 — Tool Gateway + Policy Engine** ✅ : a **deterministic** Policy Engine (ADR 0005)
+  returns `allow|ask|deny` (the model never adjudicates); trust accrues on clean runs and may
+  auto-allow medium risk, never high/critical; an injection classifier flags suspicious requests
+  and forces `ask`. Ships internal read-only tools (memory/document search, repo read, draft patch).
+  **Sandbox runtime (ADR 0011) and Credential Vault (ADR 0014) are deferred seams** — `shell|browser|mcp`
+  tools are default-deny until a sandbox exists.
 
-Everything else (tools, policy engine, sandbox, multimodal **output**, Hermes) is intentionally
+Everything else (sandbox runtime, credential vault, multimodal **output**, Hermes) is intentionally
 **not** here yet — see "Module map" for the reserved seams.
 
 ## What's implemented
@@ -39,6 +45,9 @@ Everything else (tools, policy engine, sandbox, multimodal **output**, Hermes) i
 - `GET /v1/reflections` · `POST /v1/reflections/run` · `POST /v1/reflections/{id}/status` — the
   Phase 3.5 reflective-sibling surface (ADR 0010). `run` is the job trigger (a cron/scheduler calls
   it daily/weekly); output is read-only findings, never auto-applied.
+- `GET /v1/tools` · `POST /v1/tools/{name}/request` · `GET /v1/tools/{name}/trust-score` ·
+  `POST /v1/approvals/{id}/decide` · `GET /v1/policy/rules` — the Phase 4 Tool Gateway (ADR 0005).
+  Decisions come from the Policy Engine; high-risk requests become `approval_requests` Bob decides.
 - `POST /v1/memory/candidates` · `POST /v1/memory/summarize` · `GET /v1/memory/search` ·
   `GET /v1/memory/{id}` · `POST /v1/memory/{id}/{approve|reject|supersede}` — the Phase 2
   memory lifecycle (doc 13 §4). Approval is human-only; nothing auto-promotes a candidate.
@@ -65,11 +74,12 @@ hibob_core/
                summary, graph (ADR 0006), calibration (ADR 0007)
   knowledge/   RAG (Phase 3): parsers, chunking, ingestion, vector_store, retrieval (doc 06)
   reflection/  reflective sibling (Phase 3.5): read-only conflict/assumption/stale scans (ADR 0010)
+  tools/       Tool Gateway (Phase 4): registry, builtins, gateway (request->policy->approve->execute)
+  policy/      Policy Engine (Phase 4, ADR 0005): deterministic decide() + injection provenance
   cost/        cost circuit breaker (ADR 0012)
   audit/       audit log helper
-  db/          asyncpg pool, repositories, migrations/ (0001 P1, 0003 P2, 0004 P2.5, 0005 P3, 0006 P3.5)
-  tools/       STUB — Tool Gateway (Phase 4)
-  policy/      STUB — Policy Engine (Phase 4, ADR 0005)
+  db/          asyncpg pool, repositories, migrations/ (0001 P1 .. 0006 P3.5, 0007 P4)
+  sandbox/     (planned) Ephemeral sandbox runtime (ADR 0011) — shell/browser/mcp default-deny until then
   telemetry.py OTLP → Phoenix
   config.py    pydantic-settings (HIBOB_* env)
 ```
@@ -149,6 +159,9 @@ uv run uvicorn hibob_core.api.app:app --reload --port 8088
 - `test_multimodal_attachments.py` / `test_multimodal_vision.py` / `test_multimodal_stt.py` —
   attachment validation, per-provider image-block translation, STT graceful-degrade (Phase 3.7).
 - `test_chat_multimodal.py` — audio → transcript folded into the turn; image → multimodal final message.
+- `test_policy_engine.py` — allow/ask/deny matrix, trust ceiling (high/critical never auto), sandbox guard, injection forces ask (ADR 0005).
+- `test_provenance_classifier.py` — injection patterns flagged; benign text not.
+- `test_tool_gateway.py` — low→execute+trust↑, high→pending_approval (no exec), critical→deny, approve→executes.
 
 Run them with `uv run pytest` (see "Local dev" — `uv sync` pulls the deps; the suite needs no DB/model).
 The heavy RAG parsers (Unstructured/Crawl4AI) are an optional extra — `uv pip install -e ".[ingest]"` —
@@ -166,4 +179,5 @@ docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrat
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0004_phase2_5.sql
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0005_phase3.sql
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0006_phase3_5.sql
+docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0007_phase4.sql
 ```

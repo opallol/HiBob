@@ -1,6 +1,8 @@
 # Hibob Agent & Tool Policy
 
-Status: Draft matang v0.1
+Status: Draft matang v0.1 - Policy Engine + Tool Gateway implemented (Phase 4 ✅, ADR 0005): keputusan
+allow/ask/deny deterministik di `../backend/hibob_core/policy/` + `tools/`. Sandbox (ADR 0011) &
+Credential Vault (ADR 0014) masih seam; tool `shell|browser|mcp` default-deny sampai sandbox ada.
 
 ## 1. Tujuan
 
