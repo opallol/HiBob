@@ -64,14 +64,17 @@ async def _draft_patch(conn: asyncpg.Connection, inp: dict) -> dict:
     }
 
 
+from hibob_core.selfbuild import tools as _selfbuild  # noqa: E402  (avoid import cycle at top)
+
 HANDLERS = {
     "memory_search": _memory_search,
     "document_search": _document_search,
     "repo_read": _repo_read,
     "draft_patch": _draft_patch,
+    **_selfbuild.HANDLERS,  # Phase 5: propose_blueprint_update, create_github_issue_draft
 }
 
-SEED_TOOLS = [
+_INTERNAL_SEED = [
     {"name": "memory_search", "description": "Search Bob's memories (read-only).",
      "tool_type": "internal", "risk_level": "low", "default_permission": "allow", "enabled": True,
      "input_schema": {"q": "string"}, "output_schema": {"results": "array"}},
@@ -85,3 +88,6 @@ SEED_TOOLS = [
      "tool_type": "internal", "risk_level": "high", "default_permission": "ask", "enabled": True,
      "input_schema": {"file": "string", "instruction": "string"}, "output_schema": {"draft": "string"}},
 ]
+
+# Built-in internal tools + Phase 5 self-build proposal tools (ADR 0013).
+SEED_TOOLS = _INTERNAL_SEED + _selfbuild.SEED_TOOLS

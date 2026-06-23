@@ -79,6 +79,13 @@ class Settings(BaseSettings):
     repo_read_root: str = "."           # allowlist root for the read-only repo_read tool
     tool_approval_ttl_hours: int = 24
 
+    # --- Self-building loop (Phase 5, ADR 0013) ---
+    # Touching any of these always classifies a self-build change as high risk (never auto).
+    selfbuild_sensitive_globs: list[str] = Field(default_factory=lambda: [
+        "*/policy/*", "*policy_*", "*/migrations/*", "*schema.sql",
+        "docs/05_*", "docs/08_*", "*/tools/gateway.py", "*credential*",
+    ])
+
     # --- Cost circuit breaker (ADR 0012) ---
     # Hard daily ceiling in USD for cloud calls. Breach -> pause + require approval.
     daily_budget_usd: float = 5.00

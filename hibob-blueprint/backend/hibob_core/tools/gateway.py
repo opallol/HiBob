@@ -16,6 +16,8 @@ import asyncpg
 from hibob_core.config import settings
 from hibob_core.db import repositories as core_repo
 from hibob_core.policy import engine, provenance
+from hibob_core.selfbuild import classifier as sb_classifier
+from hibob_core.selfbuild.tools import SELF_BUILD_TOOLS
 from hibob_core.tools import repository as repo
 from hibob_core.tools.builtins import HANDLERS
 
@@ -61,6 +63,12 @@ async def request_tool(
     tool = dict(tool)
     risk = tool["risk_level"]
 
+    # Self-building loop (ADR 0013): risk is assigned by WHICH files the change touches, not the
+    # tool's static tier. Security/policy/schema paths are always high (never auto-escalated).
+    risk_reasons: list[str] = []
+    if name in SELF_BUILD_TOOLS:
+        risk, risk_reasons = sb_classifier.effective_risk(risk, input.get("paths", []))
+
     # Injection defense (ADR 0005 #3): scan the request text; a hit forces at least `ask`.
     suspected, score = provenance.classify(f"{reason} {json.dumps(input)}")
     if suspected and conversation_id is not None:
@@ -78,7 +86,8 @@ async def request_tool(
     await core_repo.write_audit(
         conn, actor_type=requested_by, actor_id=None, event_type="tool.requested",
         target_type="tool", target_id=name,
-        metadata={"decision": decision.decision, "reason": decision.reason, "risk": risk},
+        metadata={"decision": decision.decision, "reason": decision.reason, "risk": risk,
+                  "risk_reasons": risk_reasons},
     )
 
     result = {"tool_run_id": None, "status": None, "approval_request_id": None,
