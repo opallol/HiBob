@@ -1,8 +1,8 @@
- # Hibob Core — Backend (Phase 1 + 2 + 2.5 + 3 + 3.5 + 3.7 + 4)  
+ # Hibob Core — Backend (Phase 1 + 2 + 2.5 + 3 + 3.5 + 3.7 + 4 + 5)  
 
 The FastAPI modular monolith that owns Hibob's identity, conversation, model routing,
-cost governance, memory, knowledge base, reflection, multimodal input, and the tool gateway.
-Implemented so far against `docs/11_ROADMAP.md`:
+cost governance, memory, knowledge base, reflection, multimodal input, the tool gateway, and the
+self-building safety gate. Implemented so far against `docs/11_ROADMAP.md`:
 
 - **Phase 1 — Core Minimal** ✅ : Bob can chat, messages persist, local/cloud models are
   selectable, and **no cloud call passes without a cost-ceiling check** (ADR 0012).
@@ -28,6 +28,10 @@ Implemented so far against `docs/11_ROADMAP.md`:
   and forces `ask`. Ships internal read-only tools (memory/document search, repo read, draft patch).
   **Sandbox runtime (ADR 0011) and Credential Vault (ADR 0014) are deferred seams** — `shell|browser|mcp`
   tools are default-deny until a sandbox exists.
+- **Phase 5 — Dev Partner Loop / Self-Building Gate** ✅ : self-build operations
+  (`propose_blueprint_update`, `draft_patch`, `create_github_issue_draft`) are `tool_run`s through the
+  same gateway, with **dynamic risk by touched files** (security/policy/schema → always high, never
+  auto, ADR 0013) and a **merge gate** (tests→eval→docs→approval). Draft-only; nothing auto-merges.
 
 Everything else (sandbox runtime, credential vault, multimodal **output**, Hermes) is intentionally
 **not** here yet — see "Module map" for the reserved seams.
@@ -48,6 +52,9 @@ Everything else (sandbox runtime, credential vault, multimodal **output**, Herme
 - `GET /v1/tools` · `POST /v1/tools/{name}/request` · `GET /v1/tools/{name}/trust-score` ·
   `POST /v1/approvals/{id}/decide` · `GET /v1/policy/rules` — the Phase 4 Tool Gateway (ADR 0005).
   Decisions come from the Policy Engine; high-risk requests become `approval_requests` Bob decides.
+- `POST /v1/selfbuild/check-merge` — the Phase 5 merge gate (ADR 0013): returns `ready`/`missing`
+  for tests→eval→docs→approval (and replay when the change touches logic). Self-build proposals are
+  requested via `/v1/tools/{name}/request`.
 - `POST /v1/memory/candidates` · `POST /v1/memory/summarize` · `GET /v1/memory/search` ·
   `GET /v1/memory/{id}` · `POST /v1/memory/{id}/{approve|reject|supersede}` — the Phase 2
   memory lifecycle (doc 13 §4). Approval is human-only; nothing auto-promotes a candidate.
@@ -76,6 +83,7 @@ hibob_core/
   reflection/  reflective sibling (Phase 3.5): read-only conflict/assumption/stale scans (ADR 0010)
   tools/       Tool Gateway (Phase 4): registry, builtins, gateway (request->policy->approve->execute)
   policy/      Policy Engine (Phase 4, ADR 0005): deterministic decide() + injection provenance
+  selfbuild/   Self-building gate (Phase 5, ADR 0013): change-risk classifier, merge gate, proposal tools
   cost/        cost circuit breaker (ADR 0012)
   audit/       audit log helper
   db/          asyncpg pool, repositories, migrations/ (0001 P1 .. 0006 P3.5, 0007 P4)
@@ -162,6 +170,8 @@ uv run uvicorn hibob_core.api.app:app --reload --port 8088
 - `test_policy_engine.py` — allow/ask/deny matrix, trust ceiling (high/critical never auto), sandbox guard, injection forces ask (ADR 0005).
 - `test_provenance_classifier.py` — injection patterns flagged; benign text not.
 - `test_tool_gateway.py` — low→execute+trust↑, high→pending_approval (no exec), critical→deny, approve→executes.
+- `test_selfbuild_classifier.py` / `test_selfbuild_gate.py` / `test_selfbuild_gateway.py` — sensitive
+  paths force high (never auto), merge-gate ordering, self-build proposal risk through the gateway (ADR 0013).
 
 Run them with `uv run pytest` (see "Local dev" — `uv sync` pulls the deps; the suite needs no DB/model).
 The heavy RAG parsers (Unstructured/Crawl4AI) are an optional extra — `uv pip install -e ".[ingest]"` —

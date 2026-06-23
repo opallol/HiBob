@@ -1,6 +1,6 @@
 # Hibob Roadmap
 
-Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-4 selesai; rencana diperluas s/d Phase 9: multimodal output + voice)
+Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-5 selesai; rencana diperluas s/d Phase 9: multimodal output + voice)
 
 **Legenda status:** ✅ selesai (kode + unit test) · 🚧 sedang dikerjakan · ⏳ planned.
 Catatan: gate eval berbasis DeepEval (kriteria exit yang menyebut "eval pass") baru punya
@@ -203,7 +203,12 @@ Exit criteria:
 - Keputusan allow/ask/deny dihasilkan Policy Engine, bukan judgement model saat itu.
 - Tool shell/browser/MCP apa pun yang dinyalakan, jalan di sandbox ephemeral - tidak ada exception ambient.
 
-## Phase 5 - Dev Partner Loop ⏳
+## Phase 5 - Dev Partner Loop ✅
+
+> v0.1 ship: self-build tools (`propose_blueprint_update`, `create_github_issue_draft`, `draft_patch`)
+> sbg `tool_run` lewat Policy Engine, dgn **risk dinamis berbasis file** (security/policy/schema →
+> selalu high, tak pernah auto) + **merge gate** berurutan tests→eval→docs→approval. Self-build
+> **draft-only** (tak nulis file/merge). CI/DeepEval/Replay nyata = eksternal/Phase 6.
 
 Goal: Hibob membantu membangun dirinya.
 

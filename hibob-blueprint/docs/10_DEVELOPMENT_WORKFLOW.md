@@ -1,6 +1,8 @@
 # Hibob Development Workflow
 
-Status: Draft matang v0.1
+Status: Draft matang v0.1 - self-building loop gate implemented (Phase 5 ✅, ADR 0013): proposal
+self-build = `tool_run` lewat Policy Engine, risk dinamis berbasis file + merge gate
+tests→eval→docs→approval. Lihat `../backend/hibob_core/selfbuild/`. CI/DeepEval/Replay = Phase 6.
 
 ## 1. Development philosophy
 
