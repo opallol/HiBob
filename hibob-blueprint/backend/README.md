@@ -1,7 +1,7 @@
- # Hibob Core — Backend (Phase 1 + 2 + 2.5 + 3)  
+ # Hibob Core — Backend (Phase 1 + 2 + 2.5 + 3 + 3.5)  
 
 The FastAPI modular monolith that owns Hibob's identity, conversation, model routing,
-cost governance, memory, and knowledge base. Implemented so far against `docs/11_ROADMAP.md`:
+cost governance, memory, knowledge base, and reflection. Implemented so far against `docs/11_ROADMAP.md`:
 
 - **Phase 1 — Core Minimal** ✅ : Bob can chat, messages persist, local/cloud models are
   selectable, and **no cloud call passes without a cost-ceiling check** (ADR 0012).
@@ -13,8 +13,12 @@ cost governance, memory, and knowledge base. Implemented so far against `docs/11
 - **Phase 3 — Knowledge Base / RAG** ✅ : document/web ingestion → chunking → local embedding →
   Qdrant, and source-referenced retrieval wired into chat (doc 06). v0.1 is **text extraction
   only** (Markdown/TXT native; PDF/DOCX via Unstructured, web via Crawl4AI as optional adapters).
+- **Phase 3.5 — Reflective Sibling** ✅ : a strictly **read-only** scheduled-capable job (ADR 0010)
+  that scans the memory graph + RAG sources for unresolved conflicts, fragile `depends_on`
+  assumptions, and stale sources, writing findings to `reflections` for Bob to review. It **never**
+  writes durable memory or calls a tool (doc 13 §11).
 
-Everything else (tools, policy engine, sandbox, reflection, multimodal, Hermes) is intentionally
+Everything else (tools, policy engine, sandbox, multimodal, Hermes) is intentionally
 **not** here yet — see "Module map" for the reserved seams.
 
 ## What's implemented
@@ -26,6 +30,9 @@ Everything else (tools, policy engine, sandbox, reflection, multimodal, Hermes) 
 - `POST /v1/documents/register` · `POST /v1/documents/{id}/ingest` · `GET /v1/documents/search` ·
   `GET /v1/ingestion-jobs/{id}` — the Phase 3 knowledge surface (doc 13 §5). Embedding is local,
   so `private`/`secret` documents never leave the machine; retrieval applies privacy containment.
+- `GET /v1/reflections` · `POST /v1/reflections/run` · `POST /v1/reflections/{id}/status` — the
+  Phase 3.5 reflective-sibling surface (ADR 0010). `run` is the job trigger (a cron/scheduler calls
+  it daily/weekly); output is read-only findings, never auto-applied.
 - `POST /v1/memory/candidates` · `POST /v1/memory/summarize` · `GET /v1/memory/search` ·
   `GET /v1/memory/{id}` · `POST /v1/memory/{id}/{approve|reject|supersede}` — the Phase 2
   memory lifecycle (doc 13 §4). Approval is human-only; nothing auto-promotes a candidate.
@@ -50,9 +57,10 @@ hibob_core/
   memory/      extraction, approval service, hybrid retrieval, vector_store,
                summary, graph (ADR 0006), calibration (ADR 0007)
   knowledge/   RAG (Phase 3): parsers, chunking, ingestion, vector_store, retrieval (doc 06)
+  reflection/  reflective sibling (Phase 3.5): read-only conflict/assumption/stale scans (ADR 0010)
   cost/        cost circuit breaker (ADR 0012)
   audit/       audit log helper
-  db/          asyncpg pool, repositories, migrations/ (0001 P1, 0003 P2, 0004 P2.5, 0005 P3)
+  db/          asyncpg pool, repositories, migrations/ (0001 P1, 0003 P2, 0004 P2.5, 0005 P3, 0006 P3.5)
   tools/       STUB — Tool Gateway (Phase 4)
   policy/      STUB — Policy Engine (Phase 4, ADR 0005)
   telemetry.py OTLP → Phoenix
@@ -130,6 +138,7 @@ uv run uvicorn hibob_core.api.app:app --reload --port 8088
 - `test_knowledge_chunking.py` — heading-aware markdown split, sizing/overlap, stable hashes (doc 06 §7).
 - `test_knowledge_retrieval.py` — document privacy containment + source-referenced results (doc 06 §4/§9).
 - `test_knowledge_ingestion.py` — pending→active pipeline, quality gate fails empty docs, job/embedding recorded.
+- `test_reflection_service.py` — one finding per scan category, dedup skips open duplicates, status validation (ADR 0010).
 
 Run them with `uv run pytest` (see "Local dev" — `uv sync` pulls the deps; the suite needs no DB/model).
 The heavy RAG parsers (Unstructured/Crawl4AI) are an optional extra — `uv pip install -e ".[ingest]"` —
@@ -144,4 +153,5 @@ on first init. Apply later migrations by hand (idempotent — safe to re-run):
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0003_phase2.sql
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0004_phase2_5.sql
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0005_phase3.sql
+docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0006_phase3_5.sql
 ```

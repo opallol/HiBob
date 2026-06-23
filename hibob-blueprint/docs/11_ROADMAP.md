@@ -1,6 +1,6 @@
 # Hibob Roadmap
 
-Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-3 selesai; rencana diperluas s/d Phase 9: multimodal input/output + voice)
+Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-3.5 selesai; rencana diperluas s/d Phase 9: multimodal input/output + voice)
 
 **Legenda status:** ✅ selesai (kode + unit test) · 🚧 sedang dikerjakan · ⏳ planned.
 Catatan: gate eval berbasis DeepEval (kriteria exit yang menyebut "eval pass") baru punya
@@ -115,7 +115,7 @@ Exit criteria:
 - Hibob menjawab dengan source reference.
 - RAG eval awal pass.
 
-## Phase 3.5 - Reflective Sibling ⏳
+## Phase 3.5 - Reflective Sibling ✅
 
 Goal: Hibob mulai proaktif, bukan cuma reaktif - realisasi langsung identitas "saudara digital" (Executive Blueprint §2), tidak perlu menunggu Phase 8.
 

@@ -299,6 +299,10 @@ Setiap minggu:
 
 ## 11a. Reflective sibling - reflection job proaktif (ADR 0010)
 
+> Status: implemented (Phase 3.5 ✅) - lihat `../backend/hibob_core/reflection/` dan endpoint
+> `/v1/reflections*`. Job strictly read-only: hanya menulis `reflections` + audit, tidak pernah
+> menulis memory durable atau memanggil tool.
+
 Review ritual di atas selama ini menunggu Bob memulai. Sejak ADR 0010, ada job reflection (harian/mingguan, model lokal, strictly read-only) yang menyisir memory graph (§9a) dan session terbaru untuk:
 
 - `memory_conflicts`/edge `contradicts` yang belum resolved,
