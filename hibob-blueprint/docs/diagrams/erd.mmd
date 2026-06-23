@@ -1,0 +1,42 @@
+erDiagram
+    users ||--o{ conversations : owns
+    users ||--o{ memories : owns
+    users ||--o{ documents : owns
+    conversations ||--o{ messages : contains
+    conversations ||--o{ session_summaries : summarized_by
+    messages ||--o{ memory_sources : source_of
+    memories ||--o{ memory_sources : has
+    memories ||--o{ memory_conflicts : conflicts
+    memories ||--o{ memory_reviews : reviewed_by
+    documents ||--o{ document_chunks : split_into
+    documents ||--o{ ingestion_jobs : processed_by
+    document_chunks ||--o{ document_embeddings : indexed_by
+    conversations ||--o{ agent_runs : triggers
+    agent_runs ||--o{ agent_steps : contains
+    agent_runs ||--o{ model_runs : uses
+    agent_steps ||--o{ tool_runs : may_call
+    tools ||--o{ tool_runs : executes
+    tools ||--o{ tool_permissions : governed_by
+    tool_runs ||--o{ approval_requests : may_require
+    approval_requests ||--o{ audit_logs : logged_as
+    eval_suites ||--o{ eval_cases : contains
+    eval_suites ||--o{ eval_runs : runs
+    eval_runs ||--o{ eval_results : produces
+
+    memories ||--o{ memory_edges : from_node
+    memories ||--o{ memory_edges : to_node
+    memories ||--o{ memory_usage_feedback : generates
+
+    policy_versions ||--o{ policy_rules : contains
+    tools ||--o{ tool_trust_scores : earns
+    tools ||--o{ sandbox_runs : isolated_via
+    tool_runs ||--o{ sandbox_runs : executed_in
+
+    model_runs ||--o{ replay_runs : replayed_as
+    eval_cases ||--o{ redteam_attempts : converted_from
+    eval_runs ||--o{ eval_judge_versions : scored_by
+
+    users ||--o{ reflections : receives
+    users ||--o{ budget_ceilings : sets
+    model_runs ||--o{ cost_ledger : debits
+    budget_ceilings ||--o{ cost_ledger : constrains

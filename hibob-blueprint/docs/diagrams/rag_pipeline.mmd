@@ -1,0 +1,13 @@
+flowchart TD
+    Source[File / Web / Repo / Note] --> Register[Register Source]
+    Register --> Privacy[Classify Privacy Tier]
+    Privacy --> Parse[Parse: Unstructured / Crawl4AI]
+    Parse --> Clean[Clean & Normalize]
+    Clean --> Chunk[Chunk with Metadata]
+    Chunk --> Embed[Generate Embeddings]
+    Embed --> Qdrant[Qdrant Vector Index]
+    Chunk --> DB[Canonical DB Chunks]
+    Qdrant --> Eval[Ingestion Quality Eval]
+    DB --> Eval
+    Eval --> Ready[Ready for Retrieval]
+    Ready --> Reflection[Reflection Job - flags stale sources, ADR 0010]
