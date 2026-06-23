@@ -515,3 +515,31 @@ CREATE TABLE router_policy_feedback (
     updated_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE(task_type, provider, model)
 );
+
+-- ADR 0014 - Operational Credential Vault
+CREATE TABLE credential_vault (
+    id UUID PRIMARY KEY,
+    user_id UUID REFERENCES users(id),
+    label TEXT NOT NULL, -- e.g. 'gmail_primary', 'kemenkeu_sso', 'digital_signature'
+    credential_type TEXT NOT NULL, -- email, sso, digital_signature, messaging, other
+    account_identifier TEXT, -- non-secret identifier (email/username) - safe to display
+    secret_ciphertext BYTEA NOT NULL, -- sealed with a key referenced by encryption_key_ref, never stored here
+    encryption_key_ref TEXT NOT NULL, -- pointer to OS keystore/external key file, never the key itself
+    risk_tier TEXT NOT NULL DEFAULT 'critical',
+    last_rotated_at TIMESTAMPTZ,
+    last_used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_credential_vault_user ON credential_vault(user_id);
+
+CREATE TABLE credential_uses (
+    id UUID PRIMARY KEY,
+    credential_id UUID REFERENCES credential_vault(id),
+    tool_run_id UUID REFERENCES tool_runs(id),
+    purpose TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_credential_uses_credential ON credential_uses(credential_id);

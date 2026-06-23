@@ -97,6 +97,11 @@ Status: Draft matang v0.1
 - `cost_ledger`
 - `router_policy_feedback`
 
+### Credential vault (ADR 0014)
+
+- `credential_vault`
+- `credential_uses`
+
 ## 3. Mermaid ERD
 
 ```mermaid
@@ -162,9 +167,13 @@ erDiagram
     users ||--o{ budget_ceilings : sets
     model_runs ||--o{ cost_ledger : debits
     budget_ceilings ||--o{ cost_ledger : constrains
+
+    users ||--o{ credential_vault : owns
+    credential_vault ||--o{ credential_uses : resolved_in
+    tool_runs ||--o{ credential_uses : may_use
 ```
 
-See section 10 for the v0.2 entities introduced by ADR 0005-0012 (`memory_edges`, `memory_usage_feedback`, `policy_rules`, `tool_trust_scores`, `content_provenance_flags`, `replay_runs`, `redteam_attempts`, `eval_judge_versions`, `reflections`, `sandbox_runs`, `budget_ceilings`, `cost_ledger`, `router_policy_feedback`).
+See section 9 for the entities introduced by ADR 0005-0012 and ADR 0014 (`memory_edges`, `memory_usage_feedback`, `policy_rules`, `tool_trust_scores`, `content_provenance_flags`, `replay_runs`, `redteam_attempts`, `eval_judge_versions`, `reflections`, `sandbox_runs`, `budget_ceilings`, `cost_ledger`, `router_policy_feedback`, `credential_vault`, `credential_uses`).
 
 ## 4. Core tables
 
@@ -435,7 +444,7 @@ stateDiagram-v2
 - Never overwrite old embeddings without migration audit.
 - Keep `embedding_model`, `embedding_dim`, and `embedding_version` in metadata.
 
-## 9. v0.2 additions (ADR 0005-0012)
+## 9. v0.2 additions (ADR 0005-0012, ADR 0014)
 
 ### memory_edges (ADR 0006)
 
@@ -469,6 +478,10 @@ One row per ephemeral container execution backing a high-risk `tool_run` (shell,
 
 `budget_ceilings` define hard daily/session spend limits; `cost_ledger` debits every cloud `model_run` against the active ceiling and flags `ceiling_breached` to trigger an approval pause. `router_policy_feedback` aggregates eval score, latency, and cost per `(task_type, provider, model)` to bias the Model Router's bounded bandit selection - it never expands which models are eligible for a task, only biases the choice among models the static routing table (doc 12 section 4) already allows.
 
+### credential_vault / credential_uses (ADR 0014)
+
+`credential_vault` stores operational login/send credentials (email, SSO, digital signature, messaging) separately from `memories`: `secret_ciphertext` is sealed with a key referenced by `encryption_key_ref` and held outside the database, `account_identifier` is the only plaintext-safe field, and `risk_tier` is hard-defaulted to `critical`. Tools never receive the decrypted value directly - they receive a `credential_ref` (the row id), which the Tool Gateway resolves server-side inside the Sandbox (ADR 0011) at the moment of execution. `credential_uses` is the audit trail: one row per resolution, linking `credential_id` to the `tool_run_id` and a `purpose` string, never the decrypted value - consistent with section 10's "store secrets in traces" anti-pattern.
+
 ## 10. Data model anti-patterns
 
 Do not:
@@ -478,4 +491,5 @@ Do not:
 - mix Bob memory and Hibob system memory without scope,
 - store secrets in traces,
 - let tools write directly to DB without service layer,
-- use one `metadata` blob for everything without indexed fields.
+- use one `metadata` blob for everything without indexed fields,
+- store an operational credential (login/send) as a `memories` row or a plain document, even at `sensitivity: secret` - it belongs in `credential_vault` (ADR 0014), never in a table designed for retrieval into prompts/vectors.
