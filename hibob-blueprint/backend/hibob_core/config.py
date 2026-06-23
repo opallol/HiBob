@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     w_recency: float = 0.10
     w_source: float = 0.10
 
+    # --- Memory graph & calibration (Phase 2.5, ADR 0006/0007) ---
+    graph_max_depth: int = 5            # recursive-CTE traversal cap (doc 04 §9a)
+    calib_alpha0: float = 1.0           # Beta prior - positive evidence
+    calib_beta0: float = 1.0            # Beta prior - negative evidence
+    calib_correction_weight: float = 4.0  # a `corrected` signal weighs 4x a passive `used`
+    calib_floor: float = 0.05           # confidence never calibrates below this
+    calib_cap: float = 0.99             # ...nor above (can't imply auto-promotion)
+    calib_review_threshold: float = 0.30  # below -> flag for weekly review (§11), not archive
+
     # --- Cost circuit breaker (ADR 0012) ---
     # Hard daily ceiling in USD for cloud calls. Breach -> pause + require approval.
     daily_budget_usd: float = 5.00

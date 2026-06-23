@@ -367,6 +367,8 @@ CREATE TABLE memory_edges (
 CREATE INDEX idx_memory_edges_from ON memory_edges(memory_id_from);
 CREATE INDEX idx_memory_edges_to ON memory_edges(memory_id_to);
 CREATE INDEX idx_memory_edges_relation ON memory_edges(relation_type);
+-- ADR 0006 (Phase 2.5) - idempotency guard for graph edges (auto-edges + POST /v1/memory/edges)
+CREATE UNIQUE INDEX idx_memory_edges_unique ON memory_edges(memory_id_from, memory_id_to, relation_type);
 
 -- ADR 0007 - Self-Calibrating Memory Confidence
 CREATE TABLE memory_usage_feedback (

@@ -81,6 +81,12 @@ async def approve(
                 conflict_type="duplicate_or_contradiction",
             )
             conflicts.append(str(cid))
+            # ADR 0006 (doc 04 §9): a conflict IS a `contradicts` edge in the memory graph.
+            await repo.add_edge(
+                conn, from_id=uuid.UUID(hit_id), to_id=memory_id,
+                relation_type="contradicts", confidence=round(float(score), 3),
+                note=f"conflict {cid}",
+            )
 
     await repo.add_review(
         conn, memory_id=memory_id, reviewer_user_id=reviewer_user_id,
@@ -128,6 +134,10 @@ async def supersede(
         raise MemoryError("memory not found")
     await repo.set_superseded(conn, memory_id, by_memory_id)
     await vector_store.delete(memory_id)  # superseded memory stops surfacing
+    # ADR 0006 (doc 04 §9 step 5): record the supersession as a graph edge (new -> old).
+    await repo.add_edge(
+        conn, from_id=by_memory_id, to_id=memory_id, relation_type="supersedes",
+    )
     await repo.add_review(
         conn, memory_id=memory_id, reviewer_user_id=reviewer_user_id,
         decision="superseded", note=f"superseded_by={by_memory_id}",

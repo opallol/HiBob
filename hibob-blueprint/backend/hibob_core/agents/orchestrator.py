@@ -1,7 +1,10 @@
-"""Agent Orchestrator (doc 02 §3.7) - Phase 1 pass-through, and the Hermes seam.
+"""Agent Orchestrator (doc 02 §3.7) - chat loop + the Hermes seam.
 
-Phase 1 loop is intentionally trivial: assemble persona -> route model -> (cost gate if
-cloud) -> generate -> persist. No retrieval, no tools, no agent loop yet.
+The loop is deliberately small and grows by phase:
+  Phase 1: assemble persona -> route model -> (cost gate if cloud) -> generate -> persist.
+  Phase 2: memory recall is folded into context assembly (doc 04 §8).
+  Phase 2.5: memories actually used are fed back as `used` calibration signals (ADR 0007).
+No tools / no multi-step agent loop yet - that arrives with the Tool Gateway (Phase 4).
 
 THE HERMES SEAM
 ---------------
@@ -28,7 +31,7 @@ import asyncpg
 from hibob_core.cost import breaker
 from hibob_core.db import repositories as repo
 from hibob_core.identity import persona
-from hibob_core.memory import retrieval
+from hibob_core.memory import calibration, retrieval
 from hibob_core.models.router import ModelRouter
 
 
@@ -38,9 +41,9 @@ class ChatOutcome:
     message_id: uuid.UUID
     response: str
     trace_id: str | None
-    used_memory_ids: list[str] = field(default_factory=list)         # empty in Phase 1
-    used_document_chunk_ids: list[str] = field(default_factory=list)  # empty in Phase 1
-    tool_run_ids: list[str] = field(default_factory=list)             # empty in Phase 1
+    used_memory_ids: list[str] = field(default_factory=list)          # populated since Phase 2
+    used_document_chunk_ids: list[str] = field(default_factory=list)  # empty until Phase 3 (RAG)
+    tool_run_ids: list[str] = field(default_factory=list)             # empty until Phase 4 (tools)
 
 
 class Orchestrator:
@@ -115,6 +118,18 @@ class Orchestrator:
             conn, conversation_id=conversation_id, role="assistant",
             content=result.text, model_run_id=model_run_id, trace_id=trace_id,
         )
+
+        # Calibration signal (Phase 2.5, ADR 0007): a memory that was recalled and used in an
+        # answer without correction is weak positive evidence -> nudge its confidence up.
+        # Degrade gracefully: a calibration failure must never break the chat response.
+        for mem_id in used_memory_ids:
+            try:
+                await calibration.record_feedback(
+                    conn, memory_id=uuid.UUID(mem_id), conversation_id=conversation_id,
+                    event_type="used", actor_user_id=user_id,
+                )
+            except Exception:
+                pass
 
         await repo.write_audit(
             conn, actor_type="assistant", actor_id=str(user_id),
