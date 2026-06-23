@@ -1,10 +1,20 @@
 # Hibob Blueprint Documentation Pack
 
 Tanggal baseline: 2026-06-23
-Status: Blueprint v0.1 - pre-implementation
+Status: Implementasi berjalan - Phase 1 (Core) + Phase 2 (Memory Core) selesai; Phase 2.5 (Memory Graph & Calibration) aktif
 Pemilik konsep: Bob
 
 Paket ini adalah fondasi dokumentasi untuk membangun **Hibob** dari nol: AI saudara digital, second brain, agent operator, dan AI dev partner yang local-first, memory-first, model-agnostic, permission-controlled, serta future-proof terhadap perkembangan model AI.
+
+## Status implementasi
+
+Repo ini bukan lagi sekadar blueprint - backend `hibob_core` sudah berjalan. Ringkas:
+
+- **Phase 1 - Core Minimal** ✅ — `/v1/chat`, persona, model router (Ollama/Anthropic), cost circuit breaker (ADR 0012), persistence, Phoenix tracing.
+- **Phase 2 - Memory Core** ✅ — extraction, approval human-only, hybrid retrieval (Qdrant + SQL) tersambung ke chat, session summary, conflict minimal.
+- **Phase 2.5 - Memory Graph & Calibration** ✅ — `memory_edges` (ADR 0006) + traversal recursive CTE, dan kalibrasi confidence via `memory_usage_feedback` (ADR 0007).
+
+Detail teknis & cara menjalankan ada di `backend/README.md`. Status per fase di `docs/11_ROADMAP.md`.
 
 Dokumen utama berada di folder `docs/`. Diagram Mermaid berada di `docs/diagrams/`. Skema database awal berada di `database/schema.sql`. ADR berada di `adr/` - termasuk ADR 0005-0013, hasil `REVIEW_DAN_REKOMENDASI_OVERPOWER.md` yang sudah diterima (Accepted) dan diintegrasikan penuh ke seluruh dokumen di atas.
 

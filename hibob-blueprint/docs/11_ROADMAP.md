@@ -1,10 +1,15 @@
 # Hibob Roadmap
 
-Status: Draft matang v0.1
+Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-2.5 selesai)
+
+**Legenda status:** ✅ selesai (kode + unit test) · 🚧 sedang dikerjakan · ⏳ planned.
+Catatan: gate eval berbasis DeepEval (kriteria exit yang menyebut "eval pass") baru punya
+harness penuh di Phase 6 - sampai saat itu, fase ditandai ✅ atas dasar implementasi + unit test,
+dengan eval formalnya menyusul.
 
 > Re-sequenced setelah ADR 0005-0013 (accepted overpower recommendations) diterima ke blueprint. Aturan emas dari review tetap berlaku: jangan kerjakan satu pun dari ADR baru ini sebelum Phase 0-2 (Core + Memory + Eval baseline) berdiri - semuanya pengali, dan pengali dari nol tetap nol. Penempatan tiap ADR ke fase mengikuti peta prioritas review (🔴 cepat, 🟠 investasi inti, 🟡 pembeda jiwa, 🟢 pengeras keamanan).
 
-## Phase 0 - Blueprint Foundation
+## Phase 0 - Blueprint Foundation ✅
 
 Goal: repo tidak kosong secara arah; keputusan besar terdokumentasi.
 
@@ -26,7 +31,7 @@ Exit criteria:
 - Scope v0.1 jelas.
 - Stack core vs sandbox jelas.
 
-## Phase 1 - Hibob Core Minimal
+## Phase 1 - Hibob Core Minimal ✅
 
 Goal: Hibob punya backend core, model router, dan conversation management.
 
@@ -48,7 +53,7 @@ Exit criteria:
 - Model local/cloud bisa dipilih.
 - Tidak ada satu pun cloud call yang lolos tanpa cek ceiling.
 
-## Phase 2 - Memory Core
+## Phase 2 - Memory Core ✅
 
 Goal: Hibob mulai mengingat secara sehat.
 
@@ -69,7 +74,7 @@ Exit criteria:
 - Hibob bisa recall keputusan lama.
 - DeepEval memory suite awal pass.
 
-## Phase 2.5 - Memory Graph & Calibration Ringan
+## Phase 2.5 - Memory Graph & Calibration Ringan ✅
 
 Goal: memory mulai punya relasi dan belajar dari pemakaiannya, tanpa menunggu Phase 8.
 
@@ -86,7 +91,7 @@ Exit criteria:
 - Memory yang berulang dikoreksi mulai turun confidence-nya secara terukur.
 - `memory_graph_calibration_eval` (doc 09 §5) pass.
 
-## Phase 3 - Knowledge Base/RAG
+## Phase 3 - Knowledge Base/RAG ⏳
 
 Goal: Hibob bisa membaca dokumen dan web.
 
@@ -106,7 +111,7 @@ Exit criteria:
 - Hibob menjawab dengan source reference.
 - RAG eval awal pass.
 
-## Phase 3.5 - Reflective Sibling
+## Phase 3.5 - Reflective Sibling ⏳
 
 Goal: Hibob mulai proaktif, bukan cuma reaktif - realisasi langsung identitas "saudara digital" (Executive Blueprint §2), tidak perlu menunggu Phase 8.
 
@@ -122,7 +127,7 @@ Exit criteria:
 - Reflection tidak pernah menulis durable memory atau memanggil tool langsung - hanya mengusulkan kandidat lewat pipeline approval yang sudah ada.
 - `reflection signal precision` (doc 09 §7) terlacak.
 
-## Phase 4 - Tool Gateway
+## Phase 4 - Tool Gateway ⏳
 
 Goal: Hibob bisa memakai tools dengan izin.
 
@@ -148,7 +153,7 @@ Exit criteria:
 - Keputusan allow/ask/deny dihasilkan Policy Engine, bukan judgement model saat itu.
 - Tool shell/browser/MCP apa pun yang dinyalakan, jalan di sandbox ephemeral - tidak ada exception ambient.
 
-## Phase 5 - Dev Partner Loop
+## Phase 5 - Dev Partner Loop ⏳
 
 Goal: Hibob membantu membangun dirinya.
 
@@ -169,7 +174,7 @@ Exit criteria:
 - Tests/evals run sebelum merge.
 - Tidak ada satu pun self-build patch yang merge tanpa lewat gate ADR 0013, berapa pun kecil diff-nya.
 
-## Phase 6 - Observability & Regression Quality
+## Phase 6 - Observability & Regression Quality ⏳
 
 Goal: kualitas Hibob bisa dilacak dan ditingkatkan.
 
@@ -193,7 +198,7 @@ Exit criteria:
 - Minimal satu replay batch sudah dijalankan dan dicatat sebagai evidence di sebuah ADR migrasi (nyata atau latihan).
 - Eval judge terpin versinya, agreement score terhadap golden dataset terlacak.
 
-## Phase 7 - Controlled Browser & Automation
+## Phase 7 - Controlled Browser & Automation ⏳
 
 Goal: Hibob bisa mengoperasikan environment terbatas.
 
@@ -215,7 +220,7 @@ Exit criteria:
 - Kalau ada tool login/kirim pesan yang diaktifkan: nol resolusi credential_ref yang lolos tanpa approval, dan nol nilai kredensial asli yang tercatat di trace/log (ADR 0014).
 - Red-team cycle terbaru terhadap tool browser/automation tidak punya `succeeded` attempt yang belum dikonversi jadi eval case.
 
-## Phase 8 - Personal AI OS Beta
+## Phase 8 - Personal AI OS Beta ⏳
 
 Goal: Hibob jadi lapisan operasi personal Bob.
 
