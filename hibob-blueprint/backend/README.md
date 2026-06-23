@@ -1,7 +1,8 @@
- # Hibob Core — Backend (Phase 1 + 2 + 2.5 + 3 + 3.5)  
+ # Hibob Core — Backend (Phase 1 + 2 + 2.5 + 3 + 3.5 + 3.7)  
 
 The FastAPI modular monolith that owns Hibob's identity, conversation, model routing,
-cost governance, memory, knowledge base, and reflection. Implemented so far against `docs/11_ROADMAP.md`:
+cost governance, memory, knowledge base, reflection, and multimodal input. Implemented so far
+against `docs/11_ROADMAP.md`:
 
 - **Phase 1 — Core Minimal** ✅ : Bob can chat, messages persist, local/cloud models are
   selectable, and **no cloud call passes without a cost-ceiling check** (ADR 0012).
@@ -17,15 +18,20 @@ cost governance, memory, knowledge base, and reflection. Implemented so far agai
   that scans the memory graph + RAG sources for unresolved conflicts, fragile `depends_on`
   assumptions, and stale sources, writing findings to `reflections` for Bob to review. It **never**
   writes durable memory or calls a tool (doc 13 §11).
+- **Phase 3.7 — Multimodal Input** ✅ : `/v1/chat` accepts image/audio `attachments`. Audio is
+  transcribed locally (STT) into the text path; images become multimodal blocks the adapters
+  translate per provider. Privacy still routes by tier (private/secret images stay local); raw
+  media is never persisted (v0.1). Output generation/voice is Phase 9.
 
-Everything else (tools, policy engine, sandbox, multimodal, Hermes) is intentionally
+Everything else (tools, policy engine, sandbox, multimodal **output**, Hermes) is intentionally
 **not** here yet — see "Module map" for the reserved seams.
 
 ## What's implemented
 
-- `POST /v1/chat` — chat with Hibob; recalls relevant approved memory **and document chunks**,
-  persists the turn, routes a model, returns trace IDs + `used_memory_ids` +
-  `used_document_chunk_ids` (doc 13 §3). Used memories get a `used` calibration signal (ADR 0007).
+- `POST /v1/chat` — chat with Hibob; accepts optional image/audio `attachments` (Phase 3.7),
+  recalls relevant approved memory **and document chunks**, persists the turn, routes a model,
+  returns trace IDs + `used_memory_ids` + `used_document_chunk_ids` (doc 13 §3). Used memories get
+  a `used` calibration signal (ADR 0007).
 - `GET /v1/conversations/{id}` — conversation metadata + messages.
 - `POST /v1/documents/register` · `POST /v1/documents/{id}/ingest` · `GET /v1/documents/search` ·
   `GET /v1/ingestion-jobs/{id}` — the Phase 3 knowledge surface (doc 13 §5). Embedding is local,
@@ -52,7 +58,8 @@ Everything else (tools, policy engine, sandbox, multimodal, Hermes) is intention
 hibob_core/
   api/         FastAPI app + /v1 routes (chat + memory + documents)
   identity/    persona/system-prompt assembly from persona_rules
-  models/      ModelAdapter ABC + ollama/anthropic adapters + static router   <-- model-agnostic seam
+  models/      ModelAdapter ABC + ollama/anthropic adapters (vision-capable) + static router  <-- model-agnostic seam
+  multimodal/  Phase 3.7 input: attachments, vision blocks, local STT (optional faster-whisper)
   agents/      orchestrator: persona -> recall (memory+docs) -> route -> generate -> persist <-- HERMES SEAM
   memory/      extraction, approval service, hybrid retrieval, vector_store,
                summary, graph (ADR 0006), calibration (ADR 0007)
@@ -139,10 +146,15 @@ uv run uvicorn hibob_core.api.app:app --reload --port 8088
 - `test_knowledge_retrieval.py` — document privacy containment + source-referenced results (doc 06 §4/§9).
 - `test_knowledge_ingestion.py` — pending→active pipeline, quality gate fails empty docs, job/embedding recorded.
 - `test_reflection_service.py` — one finding per scan category, dedup skips open duplicates, status validation (ADR 0010).
+- `test_multimodal_attachments.py` / `test_multimodal_vision.py` / `test_multimodal_stt.py` —
+  attachment validation, per-provider image-block translation, STT graceful-degrade (Phase 3.7).
+- `test_chat_multimodal.py` — audio → transcript folded into the turn; image → multimodal final message.
 
 Run them with `uv run pytest` (see "Local dev" — `uv sync` pulls the deps; the suite needs no DB/model).
 The heavy RAG parsers (Unstructured/Crawl4AI) are an optional extra — `uv pip install -e ".[ingest]"` —
-and lazy-imported; text/markdown ingestion and the whole test suite work without them.
+and lazy-imported; text/markdown ingestion and the whole test suite work without them. Local STT
+(faster-whisper) is likewise an optional extra — `uv pip install -e ".[multimodal]"` — needed only
+for audio understanding; image/vision needs no extra dep.
 
 ## Applying migrations
 

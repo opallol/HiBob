@@ -34,9 +34,16 @@ Request:
   "message": "Bob text",
   "mode": "chat|blueprint|debug|coding",
   "privacy_tier": "internal",
-  "model_preference": "auto|local|cloud"
+  "model_preference": "auto|local|cloud",
+  "attachments": [
+    {"type": "image|audio", "media_type": "image/png", "data": "<base64>", "uri": "optional-path"}
+  ]
 }
 ```
+
+`attachments` (Phase 3.7) carries image/audio input. Audio is transcribed locally (STT) into the
+text path; images become multimodal blocks. Attachments inherit the request `privacy_tier`, so
+private/secret media never routes to a cloud model; raw media is not persisted.
 
 Response:
 

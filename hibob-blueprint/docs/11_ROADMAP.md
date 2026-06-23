@@ -1,6 +1,6 @@
 # Hibob Roadmap
 
-Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-3.5 selesai; rencana diperluas s/d Phase 9: multimodal input/output + voice)
+Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-3.7 selesai; rencana diperluas s/d Phase 9: multimodal output + voice)
 
 **Legenda status:** ✅ selesai (kode + unit test) · 🚧 sedang dikerjakan · ⏳ planned.
 Catatan: gate eval berbasis DeepEval (kriteria exit yang menyebut "eval pass") baru punya
@@ -131,7 +131,7 @@ Exit criteria:
 - Reflection tidak pernah menulis durable memory atau memanggil tool langsung - hanya mengusulkan kandidat lewat pipeline approval yang sudah ada.
 - `reflection signal precision` (doc 09 §7) terlacak.
 
-## Phase 3.7 - Multimodal Input (memahami gambar & suara) ⏳
+## Phase 3.7 - Multimodal Input (memahami gambar & suara) ✅
 
 Goal: Hibob bisa **mengerti** input non-teks - gambar dan audio - bukan cuma membacanya sebagai
 file. Ditaruh di sini (tepat setelah RAG, sebelum Tool Gateway) karena bersandar pada pipeline
