@@ -34,9 +34,16 @@ Request:
   "message": "Bob text",
   "mode": "chat|blueprint|debug|coding",
   "privacy_tier": "internal",
-  "model_preference": "auto|local|cloud"
+  "model_preference": "auto|local|cloud",
+  "attachments": [
+    {"type": "image|audio", "media_type": "image/png", "data": "<base64>", "uri": "optional-path"}
+  ]
 }
 ```
+
+`attachments` (Phase 3.7) carries image/audio input. Audio is transcribed locally (STT) into the
+text path; images become multimodal blocks. Attachments inherit the request `privacy_tier`, so
+private/secret media never routes to a cloud model; raw media is not persisted.
 
 Response:
 
@@ -48,9 +55,14 @@ Response:
   "trace_id": "...",
   "used_memory_ids": [],
   "used_document_chunk_ids": [],
-  "tool_run_ids": []
+  "tool_run_ids": [],
+  "artifacts": []
 }
 ```
+
+Request also accepts `respond_voice: bool` (Phase 9, ADR 0015): when true, the reply is synthesized
+to a local audio artifact (push-to-talk voice out). `artifacts` carries generated audio/image refs;
+generated artifacts are draft-only (never auto-published) and inherit the request `privacy_tier`.
 
 ### GET `/v1/conversations/{id}`
 

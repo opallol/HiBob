@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     # --- Local model runtime (ai-stack Ollama) ---
     ollama_base_url: str = "http://localhost:11435"
     ollama_default_model: str = "qwen3.5:9b"  # fits 8GB VRAM (see ai-stack/README.md)
+    ollama_vision_model: str = "llava:7b"     # multimodal model for image input (Phase 3.7)
 
     # --- Cloud model (Anthropic Claude) ---
     anthropic_api_key: str | None = None
@@ -39,9 +40,76 @@ class Settings(BaseSettings):
     w_recency: float = 0.10
     w_source: float = 0.10
 
+    # --- Knowledge base / RAG (Phase 3, doc 06) ---
+    documents_collection: str = "hibob_documents"  # separate Qdrant collection (doc 06 §15)
+    chunk_target_tokens: int = 700        # within doc 06 §7 range (500-900)
+    chunk_overlap_tokens: int = 120       # within doc 06 §7 range (80-150)
+    chunk_min_chars: int = 20             # ingestion quality gate (doc 06 §11): skip empty chunks
+    doc_retrieval_top_k: int = 6
+    doc_retrieval_candidate_k: int = 24   # Qdrant fetch before privacy/metadata filtering
+    crawl_allowlist: list[str] = Field(default_factory=list)  # web ingest: allowlist-only (doc 06 §6.2)
+
+    # --- Memory graph & calibration (Phase 2.5, ADR 0006/0007) ---
+    graph_max_depth: int = 5            # recursive-CTE traversal cap (doc 04 §9a)
+    calib_alpha0: float = 1.0           # Beta prior - positive evidence
+    calib_beta0: float = 1.0            # Beta prior - negative evidence
+    calib_correction_weight: float = 4.0  # a `corrected` signal weighs 4x a passive `used`
+    calib_floor: float = 0.05           # confidence never calibrates below this
+    calib_cap: float = 0.99             # ...nor above (can't imply auto-promotion)
+    calib_review_threshold: float = 0.30  # below -> flag for weekly review (§11), not archive
+
+    # --- Multimodal input (Phase 3.7) ---
+    stt_model: str = "base"               # faster-whisper size (tiny|base|small|...)
+    multimodal_max_mb: int = 20           # per-attachment size ceiling
+    multimodal_allowed_image_types: list[str] = Field(
+        default_factory=lambda: ["image/png", "image/jpeg", "image/webp"]
+    )
+    multimodal_allowed_audio_types: list[str] = Field(
+        default_factory=lambda: ["audio/wav", "audio/mpeg", "audio/webm", "audio/mp4"]
+    )
+
+    # --- Reflective sibling (Phase 3.5, ADR 0010) ---
+    reflection_low_confidence: float = 0.4  # depends_on target below this = fragile assumption
+    reflection_stale_days: int = 30         # web source not recrawled within = stale (doc 06 §13)
+    reflection_max_findings: int = 20       # cap per run, anti-noise (ADR 0010)
+
+    # --- Tool Gateway & Policy Engine (Phase 4, ADR 0005) ---
+    trust_auto_threshold: float = 0.8   # medium-risk tool auto-allows once trust crosses this
+    trust_increment: float = 0.1        # per successful, non-flagged run
+    repo_read_root: str = "."           # allowlist root for the read-only repo_read tool
+    tool_approval_ttl_hours: int = 24
+
+    # --- Self-building loop (Phase 5, ADR 0013) ---
+    # Touching any of these always classifies a self-build change as high risk (never auto).
+    selfbuild_sensitive_globs: list[str] = Field(default_factory=lambda: [
+        "*/policy/*", "*policy_*", "*/migrations/*", "*schema.sql",
+        "docs/05_*", "docs/08_*", "*/tools/gateway.py", "*credential*",
+    ])
+
+    # --- Multimodal output & voice (Phase 9, ADR 0015) ---
+    image_model: str = "local-sd"        # local image-gen model (provider is a lazy seam)
+    tts_model: str = "local-tts"         # local text-to-speech model (lazy seam)
+    output_max_mb: int = 20
+    allow_cloud_image_gen: bool = False  # local-first; cloud gen would gate the cost breaker
+
+    # --- Personal AI OS (Phase 8) ---
+    recall_top_k: int = 8               # unified multi-source recall result cap
+    reflection_recurring_min: int = 2   # an open question must recur >= this across sessions
+
+    # --- Sandbox (Phase 7, ADR 0011) + Credential Vault (ADR 0014) ---
+    sandbox_backend: str = "noop"       # off | noop | docker (off => shell/browser/mcp stay deny)
+    sandbox_image: str = "hibob/sandbox:latest"
+    browser_allowlist: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1"])
+    vault_key: str | None = None        # Fernet key from env HIBOB_VAULT_KEY; NEVER stored in the DB
+    vault_key_ref: str = "env:HIBOB_VAULT_KEY"  # pointer recorded in the vault row (not the key)
+
     # --- Cost circuit breaker (ADR 0012) ---
     # Hard daily ceiling in USD for cloud calls. Breach -> pause + require approval.
     daily_budget_usd: float = 5.00
+
+    # --- Observability & evals (Phase 6, ADR 0008/0009/0012) ---
+    eval_pass_threshold: float = 0.9    # quality gate pass_rate floor (doc 09 §6)
+    router_bandit_epsilon: float = 0.0  # learned-router exploration; 0 = deterministic (off)
 
     # --- Observability (ai-stack Phoenix) ---
     otlp_endpoint: str | None = "http://localhost:4317"  # set to None to disable tracing

@@ -31,12 +31,19 @@ class ModelAdapter(ABC):
 
     provider: str
     is_cloud: bool  # router consults this to gate the cost breaker (ADR 0012)
+    supports_vision: bool = False  # whether `content` may carry image blocks (Phase 3.7)
 
     @abstractmethod
     async def generate_text(
         self, *, system: str, messages: list[dict], model: str | None = None
     ) -> GenerateResult:
-        """messages: [{'role': 'user'|'assistant', 'content': str}, ...]."""
+        """messages: [{'role': 'user'|'assistant', 'content': str | list[block]}, ...].
+
+        Phase 3.7: a message's `content` may be a list of normalized multimodal blocks
+        (see hibob_core/multimodal/vision.py) instead of a plain string:
+          {'type': 'text', 'text': ...} | {'type': 'image', 'media_type': ..., 'data': <base64>}.
+        Each adapter translates these to its provider's wire shape.
+        """
         ...
 
     # --- Seam for later phases (not implemented in Phase 1) ---

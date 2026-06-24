@@ -1,7 +1,12 @@
-"""Agent Orchestrator (doc 02 §3.7) - Phase 1 pass-through, and the Hermes seam.
+"""Agent Orchestrator (doc 02 §3.7) - chat loop + the Hermes seam.
 
-Phase 1 loop is intentionally trivial: assemble persona -> route model -> (cost gate if
-cloud) -> generate -> persist. No retrieval, no tools, no agent loop yet.
+The loop is deliberately small and grows by phase:
+  Phase 1: assemble persona -> route model -> (cost gate if cloud) -> generate -> persist.
+  Phase 2: memory recall is folded into context assembly (doc 04 §8).
+  Phase 2.5: memories actually used are fed back as `used` calibration signals (ADR 0007).
+  Phase 3: document chunks are recalled too, with source references (doc 06 §9/§10).
+  Phase 9: the reply can be synthesized to a voice artifact (push-to-talk, ADR 0015).
+Tools execute via the Tool Gateway (Phase 4), not inline in this loop.
 
 THE HERMES SEAM
 ---------------
@@ -19,6 +24,7 @@ Phase 1 does NOT build any of this - it just keeps the boundary clean so it can.
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -28,8 +34,10 @@ import asyncpg
 from hibob_core.cost import breaker
 from hibob_core.db import repositories as repo
 from hibob_core.identity import persona
-from hibob_core.memory import retrieval
+from hibob_core.knowledge import retrieval as doc_retrieval
+from hibob_core.memory import calibration, retrieval
 from hibob_core.models.router import ModelRouter
+from hibob_core.multimodal import attachments as mm, stt, vision
 
 
 @dataclass
@@ -38,9 +46,10 @@ class ChatOutcome:
     message_id: uuid.UUID
     response: str
     trace_id: str | None
-    used_memory_ids: list[str] = field(default_factory=list)         # empty in Phase 1
-    used_document_chunk_ids: list[str] = field(default_factory=list)  # empty in Phase 1
-    tool_run_ids: list[str] = field(default_factory=list)             # empty in Phase 1
+    used_memory_ids: list[str] = field(default_factory=list)          # populated since Phase 2
+    used_document_chunk_ids: list[str] = field(default_factory=list)  # populated since Phase 3 (RAG)
+    tool_run_ids: list[str] = field(default_factory=list)             # empty until Phase 4 (tools)
+    artifacts: list[dict] = field(default_factory=list)              # generated audio/image (Phase 9)
 
 
 class Orchestrator:
@@ -57,8 +66,24 @@ class Orchestrator:
         privacy_tier: str,
         model_preference: str,
         trace_id: str | None,
+        attachments: list | None = None,
+        respond_voice: bool = False,
     ) -> ChatOutcome:
-        # Persist the user's turn first.
+        # Multimodal input (Phase 3.7): validate + split. AttachmentError propagates -> HTTP 400.
+        images, audios = mm.split(attachments or [])
+
+        # Audio -> transcript (always local). Fold into the text message so the whole downstream
+        # path (memory/doc recall, persistence) is unchanged. Degrade gracefully if STT is absent.
+        for att in audios:
+            try:
+                raw = mm.get_bytes(att)
+                transcript = await asyncio.to_thread(stt.transcribe, raw, media_type=att.media_type)
+                if transcript:
+                    user_message = (user_message + "\n" + transcript).strip()
+            except Exception:
+                pass
+
+        # Persist the user's turn first (text incl. any transcript; raw media is never persisted).
         await repo.add_message(
             conn, conversation_id=conversation_id, role="user",
             content=user_message, trace_id=trace_id,
@@ -80,7 +105,27 @@ class Orchestrator:
         except Exception:
             memories = []
 
+        # Knowledge recall (Phase 3): retrieve relevant document chunks and add as context with
+        # source references (doc 06 §9/§10). Same privacy containment as memory; degrade gracefully.
+        used_document_chunk_ids: list[str] = []
+        try:
+            chunks = await doc_retrieval.retrieve(
+                conn, self.router, query=user_message, privacy_tier=privacy_tier
+            )
+            if chunks:
+                system = system + "\n\n" + doc_retrieval.render_for_prompt(chunks)
+                used_document_chunk_ids = [c["chunk_id"] for c in chunks]
+        except Exception:
+            pass
+
         history = await repo.get_history(conn, conversation_id)  # includes the new user turn
+
+        # Image input (Phase 3.7): rebuild the final user turn as multimodal blocks. The model
+        # router still gates by privacy_tier, so a private/secret image can never go to cloud.
+        if images and history:
+            history = history[:-1] + [
+                {"role": "user", "content": vision.build_user_blocks(user_message, images)}
+            ]
 
         adapter = self.router.route(privacy_tier=privacy_tier, model_preference=model_preference)
 
@@ -116,12 +161,36 @@ class Orchestrator:
             content=result.text, model_run_id=model_run_id, trace_id=trace_id,
         )
 
+        # Voice out (Phase 9, ADR 0015): synthesize the reply to audio when push-to-talk asked for it.
+        # Local-only; degrade gracefully so a TTS failure never breaks the text response.
+        artifacts: list[dict] = []
+        if respond_voice:
+            try:
+                from hibob_core.multimodal import tts
+                artifacts.append(tts.synthesize(result.text))
+            except Exception:
+                pass
+
+        # Calibration signal (Phase 2.5, ADR 0007): a memory that was recalled and used in an
+        # answer without correction is weak positive evidence -> nudge its confidence up.
+        # Degrade gracefully: a calibration failure must never break the chat response.
+        for mem_id in used_memory_ids:
+            try:
+                await calibration.record_feedback(
+                    conn, memory_id=uuid.UUID(mem_id), conversation_id=conversation_id,
+                    event_type="used", actor_user_id=user_id,
+                )
+            except Exception:
+                pass
+
         await repo.write_audit(
             conn, actor_type="assistant", actor_id=str(user_id),
             event_type="chat.responded", target_type="conversation",
             target_id=str(conversation_id),
             metadata={"provider": result.provider, "model": result.model,
-                      "cost_estimate": result.cost_estimate},
+                      "cost_estimate": result.cost_estimate,
+                      "n_images": len(images), "n_audio": len(audios),
+                      "n_artifacts": len(artifacts)},
         )
 
         return ChatOutcome(
@@ -130,4 +199,6 @@ class Orchestrator:
             response=result.text,
             trace_id=trace_id,
             used_memory_ids=used_memory_ids,
+            used_document_chunk_ids=used_document_chunk_ids,
+            artifacts=artifacts,
         )

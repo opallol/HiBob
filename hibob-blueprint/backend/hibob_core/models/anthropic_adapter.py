@@ -25,9 +25,31 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     return (input_tokens / 1_000_000) * in_rate + (output_tokens / 1_000_000) * out_rate
 
 
+def to_anthropic_messages(messages: list[dict]) -> list[dict]:
+    """Translate normalized blocks to Anthropic content blocks (Phase 3.7)."""
+    out: list[dict] = []
+    for m in messages:
+        content = m.get("content")
+        if isinstance(content, list):
+            blocks: list[dict] = []
+            for b in content:
+                if b.get("type") == "text":
+                    blocks.append({"type": "text", "text": b["text"]})
+                elif b.get("type") == "image":
+                    blocks.append({
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": b["media_type"], "data": b["data"]},
+                    })
+            out.append({"role": m["role"], "content": blocks})
+        else:
+            out.append({"role": m["role"], "content": content})
+    return out
+
+
 class AnthropicAdapter(ModelAdapter):
     provider = "anthropic"
     is_cloud = True
+    supports_vision = True  # Claude models accept image blocks natively
 
     def __init__(self, api_key: str | None = None, default_model: str | None = None):
         key = api_key or settings.anthropic_api_key
@@ -48,7 +70,7 @@ class AnthropicAdapter(ModelAdapter):
             model=model,
             max_tokens=4096,
             system=system,
-            messages=[{"role": m["role"], "content": m["content"]} for m in messages],
+            messages=to_anthropic_messages(messages),
         )
         text = "".join(b.text for b in resp.content if b.type == "text")
         in_tok = resp.usage.input_tokens

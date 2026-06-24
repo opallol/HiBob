@@ -1,6 +1,7 @@
 # Future AI Adaptation Strategy
 
-Status: Draft matang v0.1
+Status: Draft matang v0.1 - catatan: kapabilitas `vision`/`audio` (§2) sudah mulai dipakai sebagai
+input understanding sejak Phase 3.7 (lihat `../backend/hibob_core/multimodal/` + `11_ROADMAP.md`).
 
 ## 1. Purpose
 

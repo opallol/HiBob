@@ -187,6 +187,126 @@ async def fetch_by_ids(conn: asyncpg.Connection, ids: list[uuid.UUID]) -> dict[s
     return {str(r["id"]): dict(r) for r in rows}
 
 
+# ---- Phase 2.5: memory graph (ADR 0006) ----
+
+async def add_edge(
+    conn: asyncpg.Connection,
+    *,
+    from_id: uuid.UUID,
+    to_id: uuid.UUID,
+    relation_type: str,
+    confidence: float = 0.5,
+    note: str | None = None,
+) -> uuid.UUID | None:
+    """Create a directed typed relation. Idempotent: the unique (from,to,relation) index
+    (migration 0004) makes a duplicate a no-op, returning None."""
+    row = await conn.fetchrow(
+        """
+        INSERT INTO memory_edges (memory_id_from, memory_id_to, relation_type, confidence, note)
+        VALUES ($1,$2,$3,$4,$5)
+        ON CONFLICT (memory_id_from, memory_id_to, relation_type) DO NOTHING
+        RETURNING id
+        """,
+        from_id, to_id, relation_type, confidence, note,
+    )
+    return row["id"] if row else None
+
+
+async def edges_for(conn: asyncpg.Connection, memory_id: uuid.UUID) -> list[dict]:
+    """Direct edges (in + out) touching a node."""
+    rows = await conn.fetch(
+        "SELECT id, memory_id_from, memory_id_to, relation_type, confidence, note, discovered_at "
+        "FROM memory_edges WHERE memory_id_from = $1 OR memory_id_to = $1",
+        memory_id,
+    )
+    return [dict(r) for r in rows]
+
+
+async def traverse(
+    conn: asyncpg.Connection,
+    memory_id: uuid.UUID,
+    *,
+    relation_types: list[str] | None,
+    max_depth: int,
+) -> list[dict]:
+    """Walk the graph outward from `memory_id` via a recursive CTE (ADR 0006 - no graph DB).
+
+    Returns edge rows reachable within `max_depth` hops, each annotated with `depth`.
+    `relation_types=None` follows every relation; otherwise only the listed types.
+    A visited-set in the path column prevents cycles from looping forever.
+    """
+    rows = await conn.fetch(
+        """
+        WITH RECURSIVE walk AS (
+            SELECT e.id, e.memory_id_from, e.memory_id_to, e.relation_type,
+                   e.confidence, e.note, e.discovered_at,
+                   1 AS depth,
+                   ARRAY[e.memory_id_from, e.memory_id_to] AS path
+            FROM memory_edges e
+            WHERE e.memory_id_from = $1
+              AND ($2::text[] IS NULL OR e.relation_type = ANY($2::text[]))
+          UNION ALL
+            SELECT e.id, e.memory_id_from, e.memory_id_to, e.relation_type,
+                   e.confidence, e.note, e.discovered_at,
+                   w.depth + 1,
+                   w.path || e.memory_id_to
+            FROM memory_edges e
+            JOIN walk w ON e.memory_id_from = w.memory_id_to
+            WHERE w.depth < $3
+              AND ($2::text[] IS NULL OR e.relation_type = ANY($2::text[]))
+              AND NOT (e.memory_id_to = ANY(w.path))
+        )
+        SELECT id, memory_id_from, memory_id_to, relation_type, confidence, note,
+               discovered_at, depth
+        FROM walk ORDER BY depth, discovered_at
+        """,
+        memory_id, relation_types, max_depth,
+    )
+    return [dict(r) for r in rows]
+
+
+# ---- Phase 2.5: confidence calibration (ADR 0007) ----
+
+async def add_usage_feedback(
+    conn: asyncpg.Connection,
+    *,
+    memory_id: uuid.UUID,
+    conversation_id: uuid.UUID | None,
+    event_type: str,
+    signal_strength: float = 1.0,
+    note: str | None = None,
+) -> uuid.UUID:
+    row = await conn.fetchrow(
+        """
+        INSERT INTO memory_usage_feedback
+            (memory_id, conversation_id, event_type, signal_strength, note)
+        VALUES ($1,$2,$3,$4,$5) RETURNING id
+        """,
+        memory_id, conversation_id, event_type, signal_strength, note,
+    )
+    return row["id"]
+
+
+async def feedback_tallies(conn: asyncpg.Connection, memory_id: uuid.UUID) -> dict[str, float]:
+    """Sum of signal_strength per event_type for a memory - the input to the Beta update."""
+    rows = await conn.fetch(
+        "SELECT event_type, COALESCE(SUM(signal_strength), 0) AS total "
+        "FROM memory_usage_feedback WHERE memory_id = $1 GROUP BY event_type",
+        memory_id,
+    )
+    return {r["event_type"]: float(r["total"]) for r in rows}
+
+
+async def set_confidence(
+    conn: asyncpg.Connection, memory_id: uuid.UUID, confidence: float
+) -> None:
+    """Update confidence ONLY (never status - ADR 0007 forbids auto-promotion)."""
+    await conn.execute(
+        "UPDATE memories SET confidence = $2, updated_at = now() WHERE id = $1",
+        memory_id, confidence,
+    )
+
+
 async def approved_without_embedding(conn: asyncpg.Connection) -> list[dict]:
     """Approved memories missing a vector row - used to reindex seeds at startup."""
     rows = await conn.fetch(

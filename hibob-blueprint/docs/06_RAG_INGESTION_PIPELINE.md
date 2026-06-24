@@ -1,6 +1,8 @@
 # Hibob RAG & Ingestion Pipeline
 
-Status: Draft matang v0.1
+Status: Draft matang v0.1 - implemented (Phase 3 ✅). v0.1 ekstraksi teks: Markdown/TXT natif,
+PDF/DOCX via Unstructured + web via Crawl4AI sebagai adapter opsional (lazy import). Lihat
+`../backend/hibob_core/knowledge/` dan `11_ROADMAP.md`.
 
 ## 1. Tujuan
 
@@ -19,7 +21,8 @@ v0.1:
 Future:
 
 - Gmail/Calendar/Drive/Notion.
-- Audio transcript.
+- Audio transcript (STT) dan gambar (vision/caption) - dijadwalkan di Phase 3.7 "Multimodal Input"
+  (lihat `11_ROADMAP.md`): hasil transkrip/caption masuk pipeline ingestion yang sama, bukan jalur khusus.
 - Browser session capture.
 - Codebase semantic index.
 

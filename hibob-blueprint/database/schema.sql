@@ -79,6 +79,21 @@ CREATE TABLE session_summaries (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Phase 8 (Personal AI OS Beta) - lightweight project organization
+CREATE TABLE projects (
+    id UUID PRIMARY KEY,
+    user_id UUID REFERENCES users(id),
+    name TEXT NOT NULL,
+    description TEXT,
+    status TEXT DEFAULT 'active', -- active | archived
+    metadata_json JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(user_id, name)
+);
+
+CREATE INDEX idx_projects_user_status ON projects(user_id, status);
+
 CREATE TABLE memories (
     id UUID PRIMARY KEY,
     user_id UUID REFERENCES users(id),
@@ -180,6 +195,11 @@ CREATE TABLE document_chunks (
     created_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE(document_id, chunk_index)
 );
+
+-- Phase 3 (RAG) lookup indexes
+CREATE INDEX idx_documents_user_status ON documents(user_id, status);
+CREATE INDEX idx_documents_privacy ON documents(privacy_tier);
+CREATE INDEX idx_document_chunks_document ON document_chunks(document_id);
 
 CREATE TABLE document_embeddings (
     id UUID PRIMARY KEY,
@@ -367,6 +387,8 @@ CREATE TABLE memory_edges (
 CREATE INDEX idx_memory_edges_from ON memory_edges(memory_id_from);
 CREATE INDEX idx_memory_edges_to ON memory_edges(memory_id_to);
 CREATE INDEX idx_memory_edges_relation ON memory_edges(relation_type);
+-- ADR 0006 (Phase 2.5) - idempotency guard for graph edges (auto-edges + POST /v1/memory/edges)
+CREATE UNIQUE INDEX idx_memory_edges_unique ON memory_edges(memory_id_from, memory_id_to, relation_type);
 
 -- ADR 0007 - Self-Calibrating Memory Confidence
 CREATE TABLE memory_usage_feedback (
@@ -466,6 +488,8 @@ CREATE TABLE reflections (
     status TEXT DEFAULT 'unread', -- unread, read, acted_on, dismissed
     created_at TIMESTAMPTZ DEFAULT now()
 );
+
+CREATE INDEX idx_reflections_user_status ON reflections(user_id, status);
 
 -- ADR 0011 - Ephemeral OS-Level Sandbox for Tool Execution
 CREATE TABLE sandbox_runs (

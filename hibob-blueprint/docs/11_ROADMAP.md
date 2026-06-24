@@ -1,10 +1,15 @@
 # Hibob Roadmap
 
-Status: Draft matang v0.1
+Status: Draft matang v0.1 - **roadmap v0.1 LENGKAP (Phase 0-9 selesai)**. Sisa = seam yang sengaja ditunda (Docker/Playwright runner nyata, code semantic search, custom UI, provider gen/TTS, always-listening voice).
+
+**Legenda status:** ✅ selesai (kode + unit test) · 🚧 sedang dikerjakan · ⏳ planned.
+Catatan: gate eval berbasis DeepEval (kriteria exit yang menyebut "eval pass") baru punya
+harness penuh di Phase 6 - sampai saat itu, fase ditandai ✅ atas dasar implementasi + unit test,
+dengan eval formalnya menyusul.
 
 > Re-sequenced setelah ADR 0005-0013 (accepted overpower recommendations) diterima ke blueprint. Aturan emas dari review tetap berlaku: jangan kerjakan satu pun dari ADR baru ini sebelum Phase 0-2 (Core + Memory + Eval baseline) berdiri - semuanya pengali, dan pengali dari nol tetap nol. Penempatan tiap ADR ke fase mengikuti peta prioritas review (🔴 cepat, 🟠 investasi inti, 🟡 pembeda jiwa, 🟢 pengeras keamanan).
 
-## Phase 0 - Blueprint Foundation
+## Phase 0 - Blueprint Foundation ✅
 
 Goal: repo tidak kosong secara arah; keputusan besar terdokumentasi.
 
@@ -26,7 +31,7 @@ Exit criteria:
 - Scope v0.1 jelas.
 - Stack core vs sandbox jelas.
 
-## Phase 1 - Hibob Core Minimal
+## Phase 1 - Hibob Core Minimal ✅
 
 Goal: Hibob punya backend core, model router, dan conversation management.
 
@@ -48,7 +53,7 @@ Exit criteria:
 - Model local/cloud bisa dipilih.
 - Tidak ada satu pun cloud call yang lolos tanpa cek ceiling.
 
-## Phase 2 - Memory Core
+## Phase 2 - Memory Core ✅
 
 Goal: Hibob mulai mengingat secara sehat.
 
@@ -69,7 +74,7 @@ Exit criteria:
 - Hibob bisa recall keputusan lama.
 - DeepEval memory suite awal pass.
 
-## Phase 2.5 - Memory Graph & Calibration Ringan
+## Phase 2.5 - Memory Graph & Calibration Ringan ✅
 
 Goal: memory mulai punya relasi dan belajar dari pemakaiannya, tanpa menunggu Phase 8.
 
@@ -86,9 +91,13 @@ Exit criteria:
 - Memory yang berulang dikoreksi mulai turun confidence-nya secara terukur.
 - `memory_graph_calibration_eval` (doc 09 §5) pass.
 
-## Phase 3 - Knowledge Base/RAG
+## Phase 3 - Knowledge Base/RAG ✅
 
 Goal: Hibob bisa membaca dokumen dan web.
+
+> Ruang lingkup v0.1 ini **ekstraksi teks saja** (PDF/DOCX/MD/TXT via Unstructured, web via
+> Crawl4AI). Memahami **gambar (vision)** dan **audio (transkrip/STT)** sebagai input pindah ke
+> Phase 3.7 - Multimodal Input. Menghasilkan output non-teks (gambar/suara) ada di Phase 9.
 
 Deliverables:
 
@@ -106,7 +115,7 @@ Exit criteria:
 - Hibob menjawab dengan source reference.
 - RAG eval awal pass.
 
-## Phase 3.5 - Reflective Sibling
+## Phase 3.5 - Reflective Sibling ✅
 
 Goal: Hibob mulai proaktif, bukan cuma reaktif - realisasi langsung identitas "saudara digital" (Executive Blueprint §2), tidak perlu menunggu Phase 8.
 
@@ -122,9 +131,55 @@ Exit criteria:
 - Reflection tidak pernah menulis durable memory atau memanggil tool langsung - hanya mengusulkan kandidat lewat pipeline approval yang sudah ada.
 - `reflection signal precision` (doc 09 §7) terlacak.
 
-## Phase 4 - Tool Gateway
+## Phase 3.7 - Multimodal Input (memahami gambar & suara) ✅
+
+Goal: Hibob bisa **mengerti** input non-teks - gambar dan audio - bukan cuma membacanya sebagai
+file. Ditaruh di sini (tepat setelah RAG, sebelum Tool Gateway) karena bersandar pada pipeline
+ingestion/retrieval Phase 3, tapi tetap menghormati golden rule: core + memory + RAG dulu.
+
+Lingkup yang dibuka: kirim foto/screenshot/diagram lalu Hibob menjelaskannya; kirim voice note
+lalu Hibob memahami isinya. Ini **input understanding** - menghasilkan gambar/suara ada di Phase 9.
+
+Deliverables:
+
+- Perluas kontrak `/v1/chat`: terima lampiran (`attachments: [{type: image|audio, ...}]`) di samping
+  `message` teks; perluas `messages` adapter dari `content: str` menjadi blok multimodal
+  (text + image) - seam-nya sudah ada di `models/base.py` dan flag `vision/audio` di doc 12 §2.
+- Adapter vision: model multimodal lokal (mis. via Ollama) sebagai default; cloud vision (Claude)
+  hanya untuk tier non-private/secret. Routing privacy tetap berlaku - gambar/audio `private`/`secret`
+  tidak pernah ke cloud (doc 08 §4), sama seperti aturan teks.
+- Adapter audio (STT): transkripsi lokal (mis. Whisper) → teks; teks hasil transkrip masuk jalur
+  yang sudah ada (memory/RAG), bukan jalur khusus.
+- Ingestion multimodal: gambar/audio bisa di-register sebagai source (memperluas doc 06; "Audio
+  transcript" yang tadinya *Future* jadi terjadwal di sini) dan masuk knowledge base lewat
+  caption/transkrip + embedding.
+- Penyimpanan aman: berkas mentah disimpan dengan privacy tier + sensitivity, tidak pernah bocor
+  ke trace/log; biaya inferensi cloud tetap lewat cost circuit breaker (ADR 0012).
+- ADR baru saat fase dimulai: **multimodal routing & safety** (model mana untuk modality mana,
+  containment privacy untuk piksel/audio, prompt-injection lewat gambar).
+
+Exit criteria:
+
+- Bob kirim 1 gambar → Hibob menjawab tentang isinya dengan benar; kirim 1 voice note → Hibob
+  memahami maksudnya.
+- Tidak ada satu pun gambar/audio `private`/`secret` yang lolos ke cloud.
+- Tidak ada nilai biner mentah (piksel/sample audio) yang tercatat di trace/log.
+- `multimodal_input_eval` awal (vision QA + STT accuracy) pass.
+
+## Phase 4 - Tool Gateway ✅
+
+> v0.1 ship: Policy Engine deterministik (allow/ask/deny) + Tool Gateway + registry + approval flow
+> + trust escalation + provenance/injection flag + tool internal read-only. **Ditunda sbg seam**:
+> Ephemeral Sandbox runtime (ADR 0011) - tool `shell|browser|mcp` **default-deny** sampai sandbox ada;
+> Credential Vault (ADR 0014) - menyusul saat tool login/kirim pertama (Phase 7).
 
 Goal: Hibob bisa memakai tools dengan izin.
+
+> Ini fondasi **"aksi selain teks"**: di sinilah Hibob mulai *melakukan* sesuatu (bukan cuma
+> menjawab) - baca repo, jalankan internal tool, draft patch - semuanya lewat permission +
+> Policy Engine + audit. Aksi yang lebih aktif (browser/automation) di Phase 7; menghasilkan
+> output non-teks (gambar/suara) di Phase 9. Tiap penyedia image-gen/TTS nantinya didaftarkan
+> sebagai tool dan tunduk pada gateway ini.
 
 Deliverables:
 
@@ -148,7 +203,12 @@ Exit criteria:
 - Keputusan allow/ask/deny dihasilkan Policy Engine, bukan judgement model saat itu.
 - Tool shell/browser/MCP apa pun yang dinyalakan, jalan di sandbox ephemeral - tidak ada exception ambient.
 
-## Phase 5 - Dev Partner Loop
+## Phase 5 - Dev Partner Loop ✅
+
+> v0.1 ship: self-build tools (`propose_blueprint_update`, `create_github_issue_draft`, `draft_patch`)
+> sbg `tool_run` lewat Policy Engine, dgn **risk dinamis berbasis file** (security/policy/schema →
+> selalu high, tak pernah auto) + **merge gate** berurutan tests→eval→docs→approval. Self-build
+> **draft-only** (tak nulis file/merge). CI/DeepEval/Replay nyata = eksternal/Phase 6.
 
 Goal: Hibob membantu membangun dirinya.
 
@@ -169,7 +229,12 @@ Exit criteria:
 - Tests/evals run sebelum merge.
 - Tidak ada satu pun self-build patch yang merge tanpa lewat gate ADR 0013, berapa pun kecil diff-nya.
 
-## Phase 6 - Observability & Regression Quality
+## Phase 6 - Observability & Regression Quality ✅
+
+> v0.1 ship: eval harness rule-based jalan (suite `tool_policy_eval` memvalidasi Policy Engine) +
+> `eval_runs`/`eval_results` + pass_rate. **Menutup utang Phase 5**: merge gate `eval_passed` kini bisa
+> diisi `run_suite`. Seam berikutnya: LLM-judge nyata (pin + agreement sudah ada), Replay dry-run model
+> (diff/record sudah ada), learned-router bandit di-wire ke router live (default epsilon=0).
 
 Goal: kualitas Hibob bisa dilacak dan ditingkatkan.
 
@@ -193,7 +258,13 @@ Exit criteria:
 - Minimal satu replay batch sudah dijalankan dan dicatat sebagai evidence di sebuah ADR migrasi (nyata atau latihan).
 - Eval judge terpin versinya, agreement score terhadap golden dataset terlacak.
 
-## Phase 7 - Controlled Browser & Automation
+## Phase 7 - Controlled Browser & Automation ✅
+
+> v0.1 ship: Ephemeral Sandbox (ADR 0011) - interface + `NoopSandboxRunner` default + `sandbox_runs`
+> recording; gateway menjalankan `shell|browser|mcp` lewat runner (default-deny saat `sandbox_backend=off`).
+> Credential Vault (ADR 0014) - storage tersegel + resolusi **hanya dalam sandbox** + `credential_uses`,
+> `risk_tier=critical` tanpa eskalasi. Tool `browser_open` (localhost allowlist) terdaftar. Seam berikutnya:
+> `DockerSandboxRunner` + Playwright nyata, Activepieces, tool login/kirim pertama (belum dinyalakan).
 
 Goal: Hibob bisa mengoperasikan environment terbatas.
 
@@ -215,7 +286,12 @@ Exit criteria:
 - Kalau ada tool login/kirim pesan yang diaktifkan: nol resolusi credential_ref yang lolos tanpa approval, dan nol nilai kredensial asli yang tercatat di trace/log (ADR 0014).
 - Red-team cycle terbaru terhadap tool browser/automation tidak punya `succeeded` attempt yang belum dikonversi jadi eval case.
 
-## Phase 8 - Personal AI OS Beta
+## Phase 8 - Personal AI OS Beta ✅
+
+> v0.1 ship: **unified multi-source recall** (`/v1/recall` menggabungkan memory + dokumen, privacy
+> containment, scope per-project), **projects** registry (`/v1/projects`), dan **reflection lintas-sesi
+> lebih dalam** (scan `recurring_open_question` dari session summaries). Seam berikutnya: repo/code
+> semantic search (structure-aware chunking, doc 06 §14), custom UI (frontend), voice (Phase 9).
 
 Goal: Hibob jadi lapisan operasi personal Bob.
 
@@ -225,18 +301,53 @@ Deliverables:
 - reflection lintas-sesi yang lebih dalam (dasar sudah jalan sejak Phase 3.5, ADR 0010 - di sini ditingkatkan ke horizon waktu lebih panjang),
 - advanced project management,
 - repo/code semantic search,
-- optional voice,
 - custom UI.
+
+(Voice & output non-teks tidak lagi "optional" di sini - dipindah ke Phase 9 yang berdiri sendiri.)
 
 Exit criteria:
 
 - Hibob membantu planning, coding, knowledge, and reflection.
 - Bob menggunakan Hibob sebagai sistem harian.
 
+## Phase 9 - Multimodal Output & Interactive Voice ✅
+
+> v0.1 ship: image generation = tool ber-policy (`image_generate`, high → ask, audit, **tak
+> auto-publish**, privacy: private/secret tak ke cloud); TTS output lokal; voice dua arah = STT masuk
+> (Phase 3.7) + `respond_voice` → artefak audio (push-to-talk). `/v1/chat` membawa `artifacts`. ADR 0015.
+> Seam: provider gen/TTS nyata (lazy), watermark/limit, always-listening (sengaja ditunda).
+
+Goal: Hibob bisa **menghasilkan** hal selain teks dan diajak ngobrol suara dua arah. Ditaruh paling
+akhir karena outward-facing dan bersandar penuh pada pengaman yang dibangun lebih dulu: Tool Gateway
++ Policy Engine (Phase 4), Sandbox (ADR 0011), Credential Vault (ADR 0014), dan cost circuit breaker
+(ADR 0012). Tanpa fondasi itu, output generatif + voice realtime adalah pengali dari nol.
+
+Lingkup: pemahaman input gambar/audio sudah ada sejak Phase 3.7; fase ini menambah sisi **output**
+dan **interaksi suara**.
+
+Deliverables:
+
+- Image generation sebagai tool: penyedia gen-gambar didaftarkan di Tool Gateway, tunduk policy +
+  cost breaker + audit; hasil tidak pernah auto-publish, hanya disodorkan ke Bob.
+- TTS (text-to-speech): Hibob bisa "bersuara" - output audio dari jawaban teks, lokal-first.
+- Voice interaktif dua arah: STT masuk (reuse adapter audio Phase 3.7) + TTS keluar sebagai mode
+  percakapan; push-to-talk dulu, bukan always-listening.
+- Kontrak respons `/v1/chat` diperluas membawa artefak non-teks (referensi gambar/audio yang
+  dihasilkan), bukan hanya `response` teks.
+- ADR baru saat fase dimulai: **multimodal output & voice safety** (consent perekaman audio,
+  watermark/limit gambar, biaya, containment privacy untuk artefak yang dihasilkan).
+
+Exit criteria:
+
+- Bob minta gambar → Hibob menghasilkannya lewat tool ber-policy, dengan audit, tanpa auto-publish.
+- Bob bisa ngobrol suara (ngomong → Hibob paham → Hibob menjawab dengan suara).
+- Tidak ada artefak `private`/`secret` yang dihasilkan via penyedia cloud yang dilarang tier-nya.
+- Voice realtime hanya push-to-talk + perekaman dengan consent eksplisit; nol audio terekam diam-diam.
+
 ## Things intentionally delayed
 
 - avatar,
-- realtime voice,
+- always-listening / wake-word voice (Phase 9 hanya push-to-talk),
 - mobile app,
 - autonomous web write,
 - email/calendar write,

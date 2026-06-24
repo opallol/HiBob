@@ -1,10 +1,31 @@
 # Hibob Blueprint Documentation Pack
 
 Tanggal baseline: 2026-06-23
-Status: Blueprint v0.1 - pre-implementation
+Status: Roadmap v0.1 LENGKAP - Phase 1-9 selesai (Core, Memory Core, Memory Graph & Calibration, Knowledge Base/RAG, Reflective Sibling, Multimodal Input, Tool Gateway, Dev Partner Loop, Observability & Eval, Sandbox & Vault, Personal AI OS Beta, Multimodal Output & Voice)
 Pemilik konsep: Bob
 
 Paket ini adalah fondasi dokumentasi untuk membangun **Hibob** dari nol: AI saudara digital, second brain, agent operator, dan AI dev partner yang local-first, memory-first, model-agnostic, permission-controlled, serta future-proof terhadap perkembangan model AI.
+
+## Status implementasi
+
+Repo ini bukan lagi sekadar blueprint - backend `hibob_core` sudah berjalan. Ringkas:
+
+- **Phase 1 - Core Minimal** ✅ — `/v1/chat`, persona, model router (Ollama/Anthropic), cost circuit breaker (ADR 0012), persistence, Phoenix tracing.
+- **Phase 2 - Memory Core** ✅ — extraction, approval human-only, hybrid retrieval (Qdrant + SQL) tersambung ke chat, session summary, conflict minimal.
+- **Phase 2.5 - Memory Graph & Calibration** ✅ — `memory_edges` (ADR 0006) + traversal recursive CTE, dan kalibrasi confidence via `memory_usage_feedback` (ADR 0007).
+- **Phase 3 - Knowledge Base/RAG** ✅ — ingestion dokumen/web → chunking → embedding lokal → Qdrant, dan retrieval ber-sumber tersambung ke chat (doc 06; v0.1 ekstraksi teks, PDF/DOCX/web via adapter opsional).
+- **Phase 3.5 - Reflective Sibling** ✅ — job read-only (ADR 0010) yang menyisir memory graph + sumber RAG untuk konflik/asumsi rapuh/sumber basi, menulis temuan ke `reflections` untuk Bob review.
+- **Phase 3.7 - Multimodal Input** ✅ — `/v1/chat` menerima `attachments` gambar/audio: audio ditranskrip lokal (STT), gambar jadi pesan multimodal; privacy tetap by tier (media private/secret tak ke cloud), media mentah tak dipersist.
+- **Phase 4 - Tool Gateway** ✅ — Policy Engine deterministik (allow/ask/deny, ADR 0005) + approval flow + trust escalation + injection flag; tool internal read-only. Sandbox (ADR 0011) & Credential Vault (ADR 0014) ditunda sbg seam — shell/browser/mcp default-deny.
+- **Phase 5 - Dev Partner Loop** ✅ — Hibob bantu membangun dirinya (ADR 0013): proposal self-build sbg tool_run, risk dinamis berbasis file (security/policy/schema → high, tak pernah auto) + merge gate tests→eval→docs→approval. Draft-only, tak ada auto-merge.
+- **Phase 6 - Observability & Eval** ✅ — eval harness rule-based (`tool_policy_eval` memvalidasi Policy Engine) + pass_rate; Replay diff/record (ADR 0008), eval judge pin + agreement (ADR 0009), learned-router bandit (ADR 0012) sbg seam.
+- **Phase 7 - Sandbox & Vault** ✅ — Ephemeral Sandbox (ADR 0011) menjalankan shell/browser/mcp lewat runner + `sandbox_runs` (default-deny saat off); Credential Vault (ADR 0014) simpan tersegel + resolusi hanya dalam sandbox, `risk_tier=critical` tanpa eskalasi. Tool `browser_open` (localhost). Docker/Playwright + tool login/kirim = seam.
+- **Phase 8 - Personal AI OS Beta** ✅ — unified recall (`/v1/recall` gabung memory + dokumen, bisa di-scope per proyek), projects registry, dan reflection lintas-sesi (`recurring_open_question`).
+- **Phase 9 - Multimodal Output & Voice** ✅ — image generation = tool ber-policy (high → ask, tak auto-publish, private/secret tak ke cloud), TTS lokal, voice dua arah (STT masuk + `respond_voice` → artefak audio, push-to-talk). ADR 0015.
+
+**Roadmap v0.1 lengkap (Phase 0–9).** Sisa = seam yang sengaja ditunda (provider gen/TTS & Docker/Playwright nyata, code semantic search, custom UI, always-listening voice).
+
+Detail teknis & cara menjalankan ada di `backend/README.md`. Status per fase di `docs/11_ROADMAP.md`.
 
 Dokumen utama berada di folder `docs/`. Diagram Mermaid berada di `docs/diagrams/`. Skema database awal berada di `database/schema.sql`. ADR berada di `adr/` - termasuk ADR 0005-0013, hasil `REVIEW_DAN_REKOMENDASI_OVERPOWER.md` yang sudah diterima (Accepted) dan diintegrasikan penuh ke seluruh dokumen di atas.
 

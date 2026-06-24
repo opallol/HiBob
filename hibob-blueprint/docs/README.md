@@ -1,6 +1,13 @@
 # Hibob Documentation Index
 
-Dokumentasi ini dibuat sebagai blueprint matang untuk membangun Hibob dari kondisi repo kosong menuju sistem AI personal-agent yang bisa tumbuh jangka panjang.
+Dokumentasi ini dibuat sebagai blueprint matang untuk membangun Hibob menuju sistem AI personal-agent yang bisa tumbuh jangka panjang. Blueprint sudah mulai dieksekusi: backend `hibob_core` berjalan (Phase 1 + 2 + 2.5).
+
+## Status implementasi
+
+- Ringkasan per fase: `11_ROADMAP.md` (lihat penanda ✅/🚧/⏳).
+- Kode + cara menjalankan: `../backend/README.md`.
+- Selesai: Phase 1 (Core), Phase 2 (Memory Core), Phase 2.5 (Memory Graph & Calibration).
+- Aturan: dokumentasi mengikuti kode (`14_REPO_STRUCTURE.md` §3). Saat perilaku berubah, doc terkait ikut di-update.
 
 ## Dokumen produk
 

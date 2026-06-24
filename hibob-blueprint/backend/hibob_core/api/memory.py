@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from hibob_core.db import repositories as core_repo
 from hibob_core.db.pool import get_pool
-from hibob_core.memory import extraction, repository as repo, service, summary
+from hibob_core.memory import calibration, extraction, graph, repository as repo, service, summary
 from hibob_core.models.router import ModelRouter
 
 router = APIRouter()
@@ -30,6 +30,21 @@ class ReviewRequest(BaseModel):
 
 class SupersedeRequest(BaseModel):
     by_memory_id: uuid.UUID
+
+
+class EdgeRequest(BaseModel):
+    from_memory_id: uuid.UUID
+    to_memory_id: uuid.UUID
+    relation_type: str  # supersedes | contradicts | depends_on | supports | derived_from
+    note: str | None = None
+
+
+class FeedbackRequest(BaseModel):
+    # NB (doc 13 §11): no `confidence`/`status` field on purpose - calibration owns those.
+    event_type: str  # used | corrected | accepted | ignored
+    conversation_id: uuid.UUID | None = None
+    signal_strength: float = 1.0
+    note: str | None = None
 
 
 @router.post("/memory/candidates")
@@ -126,6 +141,51 @@ async def supersede(memory_id: uuid.UUID, req: SupersedeRequest) -> dict:
                 return await service.supersede(
                     conn, memory_id=memory_id, by_memory_id=req.by_memory_id,
                     reviewer_user_id=core_repo.BOB_USER_ID,
+                )
+            except service.MemoryError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---- Phase 2.5: memory graph & calibration (doc 13 §4a) ----
+
+@router.post("/memory/edges")
+async def create_edge(req: EdgeRequest) -> dict:
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            try:
+                return await graph.create_edge(
+                    conn, from_id=req.from_memory_id, to_id=req.to_memory_id,
+                    relation_type=req.relation_type, actor_user_id=core_repo.BOB_USER_ID,
+                    note=req.note,
+                )
+            except service.MemoryError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/memory/{memory_id}/edges")
+async def list_edges(
+    memory_id: uuid.UUID, depth: int = 1, relation_type: str | None = None
+) -> dict:
+    pool = get_pool()
+    rel = [relation_type] if relation_type else None
+    async with pool.acquire() as conn:
+        try:
+            return await graph.get_edges(conn, memory_id, depth=depth, relation_types=rel)
+        except service.MemoryError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/memory/{memory_id}/feedback")
+async def feedback(memory_id: uuid.UUID, req: FeedbackRequest) -> dict:
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            try:
+                return await calibration.record_feedback(
+                    conn, memory_id=memory_id, conversation_id=req.conversation_id,
+                    event_type=req.event_type, signal_strength=req.signal_strength,
+                    note=req.note, actor_user_id=core_repo.BOB_USER_ID,
                 )
             except service.MemoryError as e:
                 raise HTTPException(status_code=400, detail=str(e))
