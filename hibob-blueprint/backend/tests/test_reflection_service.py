@@ -54,12 +54,16 @@ async def test_run_creates_one_finding_per_category(monkeypatch):
     async def stale(conn, *, older_than_days, limit):
         return [_stale()]
 
+    async def recurring(conn, *, min_count, limit):
+        return []
+
     async def exists(conn, *, reflection_type, key_id):
         return False
 
     monkeypatch.setattr(repo, "open_conflicts", open_conflicts)
     monkeypatch.setattr(repo, "untested_assumptions", untested)
     monkeypatch.setattr(repo, "stale_sources", stale)
+    monkeypatch.setattr(repo, "recurring_open_questions", recurring)
     monkeypatch.setattr(repo, "reflection_exists", exists)
     _patch_writes(monkeypatch, created)
 
@@ -83,6 +87,7 @@ async def test_dedup_skips_existing_findings(monkeypatch):
     monkeypatch.setattr(repo, "open_conflicts", open_conflicts)
     monkeypatch.setattr(repo, "untested_assumptions", empty)
     monkeypatch.setattr(repo, "stale_sources", empty)
+    monkeypatch.setattr(repo, "recurring_open_questions", empty)
     monkeypatch.setattr(repo, "reflection_exists", exists)
     _patch_writes(monkeypatch, created)
 

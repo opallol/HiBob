@@ -79,6 +79,21 @@ CREATE TABLE session_summaries (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Phase 8 (Personal AI OS Beta) - lightweight project organization
+CREATE TABLE projects (
+    id UUID PRIMARY KEY,
+    user_id UUID REFERENCES users(id),
+    name TEXT NOT NULL,
+    description TEXT,
+    status TEXT DEFAULT 'active', -- active | archived
+    metadata_json JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(user_id, name)
+);
+
+CREATE INDEX idx_projects_user_status ON projects(user_id, status);
+
 CREATE TABLE memories (
     id UUID PRIMARY KEY,
     user_id UUID REFERENCES users(id),

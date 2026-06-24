@@ -86,6 +86,10 @@ class Settings(BaseSettings):
         "docs/05_*", "docs/08_*", "*/tools/gateway.py", "*credential*",
     ])
 
+    # --- Personal AI OS (Phase 8) ---
+    recall_top_k: int = 8               # unified multi-source recall result cap
+    reflection_recurring_min: int = 2   # an open question must recur >= this across sessions
+
     # --- Sandbox (Phase 7, ADR 0011) + Credential Vault (ADR 0014) ---
     sandbox_backend: str = "noop"       # off | noop | docker (off => shell/browser/mcp stay deny)
     sandbox_image: str = "hibob/sandbox:latest"

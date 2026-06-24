@@ -109,6 +109,22 @@ async def run(conn: asyncpg.Connection, *, user_id: uuid.UUID) -> dict:
         if rid:
             created.append(rid)
 
+    # 4) recurring_open_question (Phase 8, cross-session deeper reflection)
+    for q in await repo.recurring_open_questions(
+        conn, min_count=settings.reflection_recurring_min, limit=cap
+    ):
+        question = q["question"]
+        summary = (
+            f"Bob, pertanyaan '{_short(question, 80)}' muncul {q['n']}x lintas sesi tapi belum "
+            f"terjawab. Mau kita putuskan sekarang atau biarkan tetap terbuka?"
+        )
+        rid = await _emit(
+            conn, user_id=user_id, reflection_type="recurring_open_question", key_id=question,
+            summary=summary, related_memory_ids=[], related_edge_ids=[question],
+        )
+        if rid:
+            created.append(rid)
+
     await core_repo.write_audit(
         conn, actor_type="system", actor_id=str(user_id),
         event_type="reflection.run", target_type="user", target_id=str(user_id),

@@ -48,6 +48,22 @@ async def untested_assumptions(
     return [dict(r) for r in rows]
 
 
+async def recurring_open_questions(
+    conn: asyncpg.Connection, *, min_count: int, limit: int
+) -> list[dict]:
+    """Open questions that recur across multiple session summaries (Phase 8, deeper reflection)."""
+    rows = await conn.fetch(
+        """
+        SELECT q AS question, COUNT(*) AS n
+        FROM session_summaries, jsonb_array_elements_text(open_questions_json) AS q
+        GROUP BY q HAVING COUNT(*) >= $1
+        ORDER BY n DESC LIMIT $2
+        """,
+        min_count, limit,
+    )
+    return [dict(r) for r in rows]
+
+
 async def stale_sources(
     conn: asyncpg.Connection, *, older_than_days: int, limit: int
 ) -> list[dict]:
