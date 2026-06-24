@@ -1,9 +1,9 @@
- # Hibob Core — Backend (Phase 1 + 2 + 2.5 + 3 + 3.5 + 3.7 + 4 + 5 + 6 + 7)  
+ # Hibob Core — Backend (Phase 1–8)  
 
 The FastAPI modular monolith that owns Hibob's identity, conversation, model routing, cost
 governance, memory, knowledge base, reflection, multimodal input, the tool gateway, the
-self-building gate, the eval harness, the ephemeral sandbox, and the credential vault.
-Implemented so far against `docs/11_ROADMAP.md`:
+self-building gate, the eval harness, the ephemeral sandbox, the credential vault, projects, and
+unified recall. Implemented so far against `docs/11_ROADMAP.md`:
 
 - **Phase 1 — Core Minimal** ✅ : Bob can chat, messages persist, local/cloud models are
   selectable, and **no cloud call passes without a cost-ceiling check** (ADR 0012).
@@ -45,9 +45,13 @@ Implemented so far against `docs/11_ROADMAP.md`:
   **only inside the sandbox**, never into a prompt/trace/`tool_runs`; every use logs `credential_uses`,
   `risk_tier=critical` with no trust escalation. A `browser_open` (localhost) tool is registered;
   real Playwright + the first login/send tool remain seams.
+- **Phase 8 — Personal AI OS Beta** ✅ : **unified multi-source recall** (`/v1/recall` merges memory +
+  documents with privacy containment, optionally scoped to a project), a lightweight **projects**
+  registry, and **deeper cross-session reflection** (a `recurring_open_question` scan over session
+  summaries). Code semantic search + custom UI remain seams; voice is Phase 9.
 
-Everything else (real Docker/Playwright runner, login/send tools, multimodal **output**, Hermes) is
-intentionally **not** here yet — see "Module map" for the reserved seams.
+Everything else (real Docker/Playwright runner, login/send tools, code semantic search, custom UI,
+multimodal **output**, Hermes) is intentionally **not** here yet — see "Module map" for the seams.
 
 ## What's implemented
 
@@ -74,6 +78,8 @@ intentionally **not** here yet — see "Module map" for the reserved seams.
 - `GET /v1/sandbox/runs/{id}` · `POST /v1/vault/credentials` · `GET /v1/vault/credentials` — the
   Phase 7 sandbox + vault surface. The vault store returns only a non-secret view; there is **no**
   endpoint that returns a decrypted secret (resolution is sandbox-internal, ADR 0011/0014).
+- `GET /v1/recall` · `POST/GET /v1/projects` · `GET /v1/projects/{id}` · `POST /v1/projects/{id}/archive`
+  — the Phase 8 daily-OS surface: one query across memory + documents, and project organization.
 - `POST /v1/memory/candidates` · `POST /v1/memory/summarize` · `GET /v1/memory/search` ·
   `GET /v1/memory/{id}` · `POST /v1/memory/{id}/{approve|reject|supersede}` — the Phase 2
   memory lifecycle (doc 13 §4). Approval is human-only; nothing auto-promotes a candidate.
@@ -106,6 +112,8 @@ hibob_core/
   evals/       Eval harness (Phase 6): metrics, runner, replay (0008), judge (0009), router bandit (0012)
   sandbox/     Ephemeral sandbox (Phase 7, ADR 0011): spec, runner (noop/docker), sandbox_runs
   vault/       Credential vault (Phase 7, ADR 0014): sealer, store/resolve (sandbox-only), credential_uses
+  projects/    Projects registry (Phase 8): create/list/archive
+  recall.py    Unified multi-source recall (Phase 8): merges memory + document retrieval
   cost/        cost circuit breaker (ADR 0012)
   audit/       audit log helper
   db/          asyncpg pool, repositories, migrations/ (0001 P1 .. 0006 P3.5, 0007 P4)
@@ -200,6 +208,8 @@ uv run uvicorn hibob_core.api.app:app --reload --port 8088
 - `test_sandbox_runtime.py` / `test_tool_gateway_sandbox.py` — noop runner + locked-down spec;
   shell/browser deny when sandbox off, ask when on, sandbox run recorded on approve (ADR 0011).
 - `test_vault.py` — sealed store (never plaintext), resolve refused outside sandbox, use logged (ADR 0014).
+- `test_projects.py` / `test_recall.py` / `test_reflection_recurring.py` — project lifecycle, unified
+  recall merge+normalize+project-scope, cross-session recurring-question reflection (Phase 8).
 
 Run them with `uv run pytest` (see "Local dev" — `uv sync` pulls the deps; the suite needs no DB/model).
 The heavy RAG parsers (Unstructured/Crawl4AI) are an optional extra — `uv pip install -e ".[ingest]"` —
@@ -220,6 +230,7 @@ docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrat
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0007_phase4.sql
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0008_phase6.sql
 docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0009_phase7.sql
+docker exec -i hibob-core-postgres psql -U hibob -d hibob < hibob_core/db/migrations/0010_phase8.sql
 ```
 
 Phase 7 backends are optional extras (lazy-imported): `uv pip install -e ".[sandbox]"` (Docker

@@ -1,6 +1,6 @@
 # Hibob Roadmap
 
-Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-7 selesai; rencana diperluas s/d Phase 9: multimodal output + voice)
+Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-8 selesai; tersisa Phase 9: multimodal output + voice)
 
 **Legenda status:** ✅ selesai (kode + unit test) · 🚧 sedang dikerjakan · ⏳ planned.
 Catatan: gate eval berbasis DeepEval (kriteria exit yang menyebut "eval pass") baru punya
@@ -286,7 +286,12 @@ Exit criteria:
 - Kalau ada tool login/kirim pesan yang diaktifkan: nol resolusi credential_ref yang lolos tanpa approval, dan nol nilai kredensial asli yang tercatat di trace/log (ADR 0014).
 - Red-team cycle terbaru terhadap tool browser/automation tidak punya `succeeded` attempt yang belum dikonversi jadi eval case.
 
-## Phase 8 - Personal AI OS Beta ⏳
+## Phase 8 - Personal AI OS Beta ✅
+
+> v0.1 ship: **unified multi-source recall** (`/v1/recall` menggabungkan memory + dokumen, privacy
+> containment, scope per-project), **projects** registry (`/v1/projects`), dan **reflection lintas-sesi
+> lebih dalam** (scan `recurring_open_question` dari session summaries). Seam berikutnya: repo/code
+> semantic search (structure-aware chunking, doc 06 §14), custom UI (frontend), voice (Phase 9).
 
 Goal: Hibob jadi lapisan operasi personal Bob.
 
