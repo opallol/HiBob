@@ -65,6 +65,18 @@ async def _draft_patch(conn: asyncpg.Connection, inp: dict) -> dict:
     }
 
 
+async def _image_generate(conn: asyncpg.Connection, inp: dict) -> dict:
+    # Phase 9 (ADR 0015): policy-gated, never auto-published. Privacy inherited from the request.
+    from hibob_core.multimodal import image_gen as images
+    try:
+        return images.generate(
+            inp.get("prompt", ""), privacy_tier=inp.get("privacy_tier", "internal"),
+            model_preference=inp.get("model_preference", "local"),
+        )
+    except images.OutputError as e:
+        raise ToolError(str(e))
+
+
 async def _browser_open(conn: asyncpg.Connection, inp: dict) -> dict:
     # Phase 7 (ADR 0011): runs inside the sandbox (the gateway wraps this). localhost-only allowlist.
     url = inp.get("url", "")
@@ -83,6 +95,7 @@ HANDLERS = {
     "repo_read": _repo_read,
     "draft_patch": _draft_patch,
     "browser_open": _browser_open,  # Phase 7: tool_type=browser, runs in the sandbox
+    "image_generate": _image_generate,  # Phase 9: policy-gated, draft-only (ADR 0015)
     **_selfbuild.HANDLERS,  # Phase 5: propose_blueprint_update, create_github_issue_draft
 }
 
@@ -103,6 +116,10 @@ _INTERNAL_SEED = [
      "tool_type": "browser", "risk_level": "high", "default_permission": "ask", "enabled": True,
      "input_schema": {"url": "string", "constraints": {"allow_hosts": ["localhost", "127.0.0.1"]}},
      "output_schema": {"opened": "bool"}},
+    {"name": "image_generate", "description": "Generate an image (draft-only, never auto-published).",
+     "tool_type": "internal", "risk_level": "high", "default_permission": "ask", "enabled": True,
+     "input_schema": {"prompt": "string", "privacy_tier": "string"},
+     "output_schema": {"ref": "string", "published": "bool"}},
 ]
 
 # Built-in internal tools + Phase 5 self-build proposal tools (ADR 0013).

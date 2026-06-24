@@ -86,6 +86,12 @@ class Settings(BaseSettings):
         "docs/05_*", "docs/08_*", "*/tools/gateway.py", "*credential*",
     ])
 
+    # --- Multimodal output & voice (Phase 9, ADR 0015) ---
+    image_model: str = "local-sd"        # local image-gen model (provider is a lazy seam)
+    tts_model: str = "local-tts"         # local text-to-speech model (lazy seam)
+    output_max_mb: int = 20
+    allow_cloud_image_gen: bool = False  # local-first; cloud gen would gate the cost breaker
+
     # --- Personal AI OS (Phase 8) ---
     recall_top_k: int = 8               # unified multi-source recall result cap
     reflection_recurring_min: int = 2   # an open question must recur >= this across sessions

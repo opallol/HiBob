@@ -26,6 +26,7 @@ class ChatRequest(BaseModel):
     privacy_tier: str = "internal"    # public | internal | private | secret
     model_preference: str = "auto"    # auto | local | cloud
     attachments: list[Attachment] = Field(default_factory=list)  # image/audio input (Phase 3.7)
+    respond_voice: bool = False       # synthesize the reply to audio (Phase 9, ADR 0015)
 
 
 class ChatResponse(BaseModel):
@@ -36,6 +37,7 @@ class ChatResponse(BaseModel):
     used_memory_ids: list[str] = Field(default_factory=list)
     used_document_chunk_ids: list[str] = Field(default_factory=list)
     tool_run_ids: list[str] = Field(default_factory=list)
+    artifacts: list[dict] = Field(default_factory=list)  # generated audio/image (Phase 9)
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -66,6 +68,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
                         model_preference=req.model_preference,
                         trace_id=span.trace_id,
                         attachments=req.attachments,
+                        respond_voice=req.respond_voice,
                     )
                 except AttachmentError as e:
                     raise HTTPException(status_code=400, detail=str(e))
@@ -85,6 +88,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
         used_memory_ids=outcome.used_memory_ids,
         used_document_chunk_ids=outcome.used_document_chunk_ids,
         tool_run_ids=outcome.tool_run_ids,
+        artifacts=outcome.artifacts,
     )
 
 

@@ -5,7 +5,8 @@ The loop is deliberately small and grows by phase:
   Phase 2: memory recall is folded into context assembly (doc 04 §8).
   Phase 2.5: memories actually used are fed back as `used` calibration signals (ADR 0007).
   Phase 3: document chunks are recalled too, with source references (doc 06 §9/§10).
-No tools / no multi-step agent loop yet - that arrives with the Tool Gateway (Phase 4).
+  Phase 9: the reply can be synthesized to a voice artifact (push-to-talk, ADR 0015).
+Tools execute via the Tool Gateway (Phase 4), not inline in this loop.
 
 THE HERMES SEAM
 ---------------
@@ -48,6 +49,7 @@ class ChatOutcome:
     used_memory_ids: list[str] = field(default_factory=list)          # populated since Phase 2
     used_document_chunk_ids: list[str] = field(default_factory=list)  # populated since Phase 3 (RAG)
     tool_run_ids: list[str] = field(default_factory=list)             # empty until Phase 4 (tools)
+    artifacts: list[dict] = field(default_factory=list)              # generated audio/image (Phase 9)
 
 
 class Orchestrator:
@@ -65,6 +67,7 @@ class Orchestrator:
         model_preference: str,
         trace_id: str | None,
         attachments: list | None = None,
+        respond_voice: bool = False,
     ) -> ChatOutcome:
         # Multimodal input (Phase 3.7): validate + split. AttachmentError propagates -> HTTP 400.
         images, audios = mm.split(attachments or [])
@@ -158,6 +161,16 @@ class Orchestrator:
             content=result.text, model_run_id=model_run_id, trace_id=trace_id,
         )
 
+        # Voice out (Phase 9, ADR 0015): synthesize the reply to audio when push-to-talk asked for it.
+        # Local-only; degrade gracefully so a TTS failure never breaks the text response.
+        artifacts: list[dict] = []
+        if respond_voice:
+            try:
+                from hibob_core.multimodal import tts
+                artifacts.append(tts.synthesize(result.text))
+            except Exception:
+                pass
+
         # Calibration signal (Phase 2.5, ADR 0007): a memory that was recalled and used in an
         # answer without correction is weak positive evidence -> nudge its confidence up.
         # Degrade gracefully: a calibration failure must never break the chat response.
@@ -176,7 +189,8 @@ class Orchestrator:
             target_id=str(conversation_id),
             metadata={"provider": result.provider, "model": result.model,
                       "cost_estimate": result.cost_estimate,
-                      "n_images": len(images), "n_audio": len(audios)},
+                      "n_images": len(images), "n_audio": len(audios),
+                      "n_artifacts": len(artifacts)},
         )
 
         return ChatOutcome(
@@ -186,4 +200,5 @@ class Orchestrator:
             trace_id=trace_id,
             used_memory_ids=used_memory_ids,
             used_document_chunk_ids=used_document_chunk_ids,
+            artifacts=artifacts,
         )
