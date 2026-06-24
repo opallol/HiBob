@@ -1,6 +1,10 @@
 # Hibob Security, Privacy & Governance
 
-Status: Draft matang v0.1
+Status: Draft matang v0.1 - Sandbox (ADR 0011) + Credential Vault (ADR 0014) implemented (Phase 7 ✅):
+shell/browser/mcp jalan dalam sandbox ephemeral (`../backend/hibob_core/sandbox/`); kredensial
+tersegel (kunci di luar DB), diresolusi **hanya dalam sandbox**, decrypted value tak pernah masuk
+prompt/trace/`tool_runs`/memory (`../backend/hibob_core/vault/`). Docker/Playwright nyata + tool
+login/kirim = seam berikutnya.
 
 ## 1. Security posture
 

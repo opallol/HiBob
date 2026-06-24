@@ -1,6 +1,6 @@
 # Hibob Roadmap
 
-Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-6 selesai; rencana diperluas s/d Phase 9: multimodal output + voice)
+Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-7 selesai; rencana diperluas s/d Phase 9: multimodal output + voice)
 
 **Legenda status:** ✅ selesai (kode + unit test) · 🚧 sedang dikerjakan · ⏳ planned.
 Catatan: gate eval berbasis DeepEval (kriteria exit yang menyebut "eval pass") baru punya
@@ -258,7 +258,13 @@ Exit criteria:
 - Minimal satu replay batch sudah dijalankan dan dicatat sebagai evidence di sebuah ADR migrasi (nyata atau latihan).
 - Eval judge terpin versinya, agreement score terhadap golden dataset terlacak.
 
-## Phase 7 - Controlled Browser & Automation ⏳
+## Phase 7 - Controlled Browser & Automation ✅
+
+> v0.1 ship: Ephemeral Sandbox (ADR 0011) - interface + `NoopSandboxRunner` default + `sandbox_runs`
+> recording; gateway menjalankan `shell|browser|mcp` lewat runner (default-deny saat `sandbox_backend=off`).
+> Credential Vault (ADR 0014) - storage tersegel + resolusi **hanya dalam sandbox** + `credential_uses`,
+> `risk_tier=critical` tanpa eskalasi. Tool `browser_open` (localhost allowlist) terdaftar. Seam berikutnya:
+> `DockerSandboxRunner` + Playwright nyata, Activepieces, tool login/kirim pertama (belum dinyalakan).
 
 Goal: Hibob bisa mengoperasikan environment terbatas.
 

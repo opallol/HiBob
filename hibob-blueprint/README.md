@@ -1,7 +1,7 @@
 # Hibob Blueprint Documentation Pack
 
 Tanggal baseline: 2026-06-23
-Status: Implementasi berjalan - Phase 1-6 selesai (Core, Memory Core, Memory Graph & Calibration, Knowledge Base/RAG, Reflective Sibling, Multimodal Input, Tool Gateway, Dev Partner Loop, Observability & Eval)
+Status: Implementasi berjalan - Phase 1-7 selesai (Core, Memory Core, Memory Graph & Calibration, Knowledge Base/RAG, Reflective Sibling, Multimodal Input, Tool Gateway, Dev Partner Loop, Observability & Eval, Sandbox & Vault)
 Pemilik konsep: Bob
 
 Paket ini adalah fondasi dokumentasi untuk membangun **Hibob** dari nol: AI saudara digital, second brain, agent operator, dan AI dev partner yang local-first, memory-first, model-agnostic, permission-controlled, serta future-proof terhadap perkembangan model AI.
@@ -19,6 +19,7 @@ Repo ini bukan lagi sekadar blueprint - backend `hibob_core` sudah berjalan. Rin
 - **Phase 4 - Tool Gateway** ✅ — Policy Engine deterministik (allow/ask/deny, ADR 0005) + approval flow + trust escalation + injection flag; tool internal read-only. Sandbox (ADR 0011) & Credential Vault (ADR 0014) ditunda sbg seam — shell/browser/mcp default-deny.
 - **Phase 5 - Dev Partner Loop** ✅ — Hibob bantu membangun dirinya (ADR 0013): proposal self-build sbg tool_run, risk dinamis berbasis file (security/policy/schema → high, tak pernah auto) + merge gate tests→eval→docs→approval. Draft-only, tak ada auto-merge.
 - **Phase 6 - Observability & Eval** ✅ — eval harness rule-based (`tool_policy_eval` memvalidasi Policy Engine) + pass_rate; Replay diff/record (ADR 0008), eval judge pin + agreement (ADR 0009), learned-router bandit (ADR 0012) sbg seam.
+- **Phase 7 - Sandbox & Vault** ✅ — Ephemeral Sandbox (ADR 0011) menjalankan shell/browser/mcp lewat runner + `sandbox_runs` (default-deny saat off); Credential Vault (ADR 0014) simpan tersegel + resolusi hanya dalam sandbox, `risk_tier=critical` tanpa eskalasi. Tool `browser_open` (localhost). Docker/Playwright + tool login/kirim = seam.
 
 Detail teknis & cara menjalankan ada di `backend/README.md`. Status per fase di `docs/11_ROADMAP.md`.
 
