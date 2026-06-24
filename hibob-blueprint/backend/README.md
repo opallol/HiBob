@@ -1,9 +1,9 @@
- # Hibob Core — Backend (Phase 1–8)  
+ # Hibob Core — Backend (Phase 1–9, roadmap v0.1 complete)  
 
 The FastAPI modular monolith that owns Hibob's identity, conversation, model routing, cost
-governance, memory, knowledge base, reflection, multimodal input, the tool gateway, the
+governance, memory, knowledge base, reflection, multimodal input/output, the tool gateway, the
 self-building gate, the eval harness, the ephemeral sandbox, the credential vault, projects, and
-unified recall. Implemented so far against `docs/11_ROADMAP.md`:
+unified recall. Implemented against `docs/11_ROADMAP.md` (Phase 0–9):
 
 - **Phase 1 — Core Minimal** ✅ : Bob can chat, messages persist, local/cloud models are
   selectable, and **no cloud call passes without a cost-ceiling check** (ADR 0012).
@@ -48,17 +48,22 @@ unified recall. Implemented so far against `docs/11_ROADMAP.md`:
 - **Phase 8 — Personal AI OS Beta** ✅ : **unified multi-source recall** (`/v1/recall` merges memory +
   documents with privacy containment, optionally scoped to a project), a lightweight **projects**
   registry, and **deeper cross-session reflection** (a `recurring_open_question` scan over session
-  summaries). Code semantic search + custom UI remain seams; voice is Phase 9.
+  summaries).
+- **Phase 9 — Multimodal Output & Interactive Voice** ✅ : image generation as a **policy-gated tool**
+  (`image_generate`, high → ask, audit, never auto-published, private/secret never cloud); local
+  **TTS**; two-way voice = STT input (Phase 3.7) + `respond_voice` → an audio artifact on `/v1/chat`
+  (push-to-talk). ADR 0015.
 
-Everything else (real Docker/Playwright runner, login/send tools, code semantic search, custom UI,
-multimodal **output**, Hermes) is intentionally **not** here yet — see "Module map" for the seams.
+The roadmap's v0.1 is complete. Remaining work is deliberately-deferred seams (real Docker/Playwright
+runner, login/send tools, concrete gen/TTS providers, code semantic search, custom UI, always-listening
+voice, Hermes) — see "Module map".
 
 ## What's implemented
 
-- `POST /v1/chat` — chat with Hibob; accepts optional image/audio `attachments` (Phase 3.7),
-  recalls relevant approved memory **and document chunks**, persists the turn, routes a model,
-  returns trace IDs + `used_memory_ids` + `used_document_chunk_ids` (doc 13 §3). Used memories get
-  a `used` calibration signal (ADR 0007).
+- `POST /v1/chat` — chat with Hibob; accepts optional image/audio `attachments` (Phase 3.7) and
+  `respond_voice` (Phase 9), recalls relevant approved memory **and document chunks**, persists the
+  turn, routes a model, returns trace IDs + `used_memory_ids` + `used_document_chunk_ids` +
+  `artifacts` (doc 13 §3). Used memories get a `used` calibration signal (ADR 0007).
 - `GET /v1/conversations/{id}` — conversation metadata + messages.
 - `POST /v1/documents/register` · `POST /v1/documents/{id}/ingest` · `GET /v1/documents/search` ·
   `GET /v1/ingestion-jobs/{id}` — the Phase 3 knowledge surface (doc 13 §5). Embedding is local,
@@ -114,6 +119,7 @@ hibob_core/
   vault/       Credential vault (Phase 7, ADR 0014): sealer, store/resolve (sandbox-only), credential_uses
   projects/    Projects registry (Phase 8): create/list/archive
   recall.py    Unified multi-source recall (Phase 8): merges memory + document retrieval
+  multimodal/  input: attachments/vision/STT (Phase 3.7); output: image_gen + TTS (Phase 9, ADR 0015)
   cost/        cost circuit breaker (ADR 0012)
   audit/       audit log helper
   db/          asyncpg pool, repositories, migrations/ (0001 P1 .. 0006 P3.5, 0007 P4)
@@ -210,6 +216,9 @@ uv run uvicorn hibob_core.api.app:app --reload --port 8088
 - `test_vault.py` — sealed store (never plaintext), resolve refused outside sandbox, use logged (ADR 0014).
 - `test_projects.py` / `test_recall.py` / `test_reflection_recurring.py` — project lifecycle, unified
   recall merge+normalize+project-scope, cross-session recurring-question reflection (Phase 8).
+- `test_output_images.py` / `test_output_tts.py` / `test_image_generate_tool.py` / `test_chat_voice_out.py`
+  — image-gen privacy + draft-only, TTS artifact, image_generate through the gateway (ask, never
+  auto-published), and respond_voice producing an audio artifact (Phase 9, ADR 0015).
 
 Run them with `uv run pytest` (see "Local dev" — `uv sync` pulls the deps; the suite needs no DB/model).
 The heavy RAG parsers (Unstructured/Crawl4AI) are an optional extra — `uv pip install -e ".[ingest]"` —

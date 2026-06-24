@@ -190,6 +190,7 @@ adr/
   0012-learned-router-and-cost-circuit-breaker.md
   0013-self-building-loop-safety-mechanism.md
   0014-operational-credential-vault.md
+  0015-multimodal-output-and-voice-safety.md
 ```
 
 ADR template:

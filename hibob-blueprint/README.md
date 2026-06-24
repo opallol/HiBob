@@ -1,7 +1,7 @@
 # Hibob Blueprint Documentation Pack
 
 Tanggal baseline: 2026-06-23
-Status: Implementasi berjalan - Phase 1-8 selesai (Core, Memory Core, Memory Graph & Calibration, Knowledge Base/RAG, Reflective Sibling, Multimodal Input, Tool Gateway, Dev Partner Loop, Observability & Eval, Sandbox & Vault, Personal AI OS Beta)
+Status: Roadmap v0.1 LENGKAP - Phase 1-9 selesai (Core, Memory Core, Memory Graph & Calibration, Knowledge Base/RAG, Reflective Sibling, Multimodal Input, Tool Gateway, Dev Partner Loop, Observability & Eval, Sandbox & Vault, Personal AI OS Beta, Multimodal Output & Voice)
 Pemilik konsep: Bob
 
 Paket ini adalah fondasi dokumentasi untuk membangun **Hibob** dari nol: AI saudara digital, second brain, agent operator, dan AI dev partner yang local-first, memory-first, model-agnostic, permission-controlled, serta future-proof terhadap perkembangan model AI.
@@ -20,7 +20,10 @@ Repo ini bukan lagi sekadar blueprint - backend `hibob_core` sudah berjalan. Rin
 - **Phase 5 - Dev Partner Loop** ✅ — Hibob bantu membangun dirinya (ADR 0013): proposal self-build sbg tool_run, risk dinamis berbasis file (security/policy/schema → high, tak pernah auto) + merge gate tests→eval→docs→approval. Draft-only, tak ada auto-merge.
 - **Phase 6 - Observability & Eval** ✅ — eval harness rule-based (`tool_policy_eval` memvalidasi Policy Engine) + pass_rate; Replay diff/record (ADR 0008), eval judge pin + agreement (ADR 0009), learned-router bandit (ADR 0012) sbg seam.
 - **Phase 7 - Sandbox & Vault** ✅ — Ephemeral Sandbox (ADR 0011) menjalankan shell/browser/mcp lewat runner + `sandbox_runs` (default-deny saat off); Credential Vault (ADR 0014) simpan tersegel + resolusi hanya dalam sandbox, `risk_tier=critical` tanpa eskalasi. Tool `browser_open` (localhost). Docker/Playwright + tool login/kirim = seam.
-- **Phase 8 - Personal AI OS Beta** ✅ — unified recall (`/v1/recall` gabung memory + dokumen, bisa di-scope per proyek), projects registry, dan reflection lintas-sesi (`recurring_open_question`). Code semantic search + custom UI = seam; voice = Phase 9.
+- **Phase 8 - Personal AI OS Beta** ✅ — unified recall (`/v1/recall` gabung memory + dokumen, bisa di-scope per proyek), projects registry, dan reflection lintas-sesi (`recurring_open_question`).
+- **Phase 9 - Multimodal Output & Voice** ✅ — image generation = tool ber-policy (high → ask, tak auto-publish, private/secret tak ke cloud), TTS lokal, voice dua arah (STT masuk + `respond_voice` → artefak audio, push-to-talk). ADR 0015.
+
+**Roadmap v0.1 lengkap (Phase 0–9).** Sisa = seam yang sengaja ditunda (provider gen/TTS & Docker/Playwright nyata, code semantic search, custom UI, always-listening voice).
 
 Detail teknis & cara menjalankan ada di `backend/README.md`. Status per fase di `docs/11_ROADMAP.md`.
 

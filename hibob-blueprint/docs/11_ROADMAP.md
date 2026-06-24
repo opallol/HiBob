@@ -1,6 +1,6 @@
 # Hibob Roadmap
 
-Status: Draft matang v0.1 - eksekusi berjalan (Phase 0-8 selesai; tersisa Phase 9: multimodal output + voice)
+Status: Draft matang v0.1 - **roadmap v0.1 LENGKAP (Phase 0-9 selesai)**. Sisa = seam yang sengaja ditunda (Docker/Playwright runner nyata, code semantic search, custom UI, provider gen/TTS, always-listening voice).
 
 **Legenda status:** ✅ selesai (kode + unit test) · 🚧 sedang dikerjakan · ⏳ planned.
 Catatan: gate eval berbasis DeepEval (kriteria exit yang menyebut "eval pass") baru punya
@@ -310,7 +310,12 @@ Exit criteria:
 - Hibob membantu planning, coding, knowledge, and reflection.
 - Bob menggunakan Hibob sebagai sistem harian.
 
-## Phase 9 - Multimodal Output & Interactive Voice ⏳
+## Phase 9 - Multimodal Output & Interactive Voice ✅
+
+> v0.1 ship: image generation = tool ber-policy (`image_generate`, high → ask, audit, **tak
+> auto-publish**, privacy: private/secret tak ke cloud); TTS output lokal; voice dua arah = STT masuk
+> (Phase 3.7) + `respond_voice` → artefak audio (push-to-talk). `/v1/chat` membawa `artifacts`. ADR 0015.
+> Seam: provider gen/TTS nyata (lazy), watermark/limit, always-listening (sengaja ditunda).
 
 Goal: Hibob bisa **menghasilkan** hal selain teks dan diajak ngobrol suara dua arah. Ditaruh paling
 akhir karena outward-facing dan bersandar penuh pada pengaman yang dibangun lebih dulu: Tool Gateway

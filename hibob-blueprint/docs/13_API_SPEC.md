@@ -55,9 +55,14 @@ Response:
   "trace_id": "...",
   "used_memory_ids": [],
   "used_document_chunk_ids": [],
-  "tool_run_ids": []
+  "tool_run_ids": [],
+  "artifacts": []
 }
 ```
+
+Request also accepts `respond_voice: bool` (Phase 9, ADR 0015): when true, the reply is synthesized
+to a local audio artifact (push-to-talk voice out). `artifacts` carries generated audio/image refs;
+generated artifacts are draft-only (never auto-published) and inherit the request `privacy_tier`.
 
 ### GET `/v1/conversations/{id}`
 
