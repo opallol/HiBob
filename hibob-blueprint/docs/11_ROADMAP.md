@@ -2,6 +2,8 @@
 
 Status: Draft matang v0.1 - **roadmap v0.1 LENGKAP (Phase 0-9 selesai)**. Sisa = seam yang sengaja ditunda (Docker/Playwright runner nyata, code semantic search, custom UI, provider gen/TTS, always-listening voice).
 
+> Apa yang siap dipakai vs masih seam, plus langkah lengkap menuju go-live (jalankan live, UI, credential aman): **`17_GO_LIVE_READINESS.md`**.
+
 **Legenda status:** ✅ selesai (kode + unit test) · 🚧 sedang dikerjakan · ⏳ planned.
 Catatan: gate eval berbasis DeepEval (kriteria exit yang menyebut "eval pass") baru punya
 harness penuh di Phase 6 - sampai saat itu, fase ditandai ✅ atas dasar implementasi + unit test,

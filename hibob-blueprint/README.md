@@ -25,6 +25,8 @@ Repo ini bukan lagi sekadar blueprint - backend `hibob_core` sudah berjalan. Rin
 
 **Roadmap v0.1 lengkap (Phase 0–9).** Sisa = seam yang sengaja ditunda (provider gen/TTS & Docker/Playwright nyata, code semantic search, custom UI, always-listening voice).
 
+> **Siap dipakai harian / pegang credential / ada UI?** Jawaban jujur + langkah lengkap berikutnya ada di **`docs/17_GO_LIVE_READINESS.md`**. Singkatnya: backend lengkap arsitekturnya tapi belum pernah jalan live, **belum ada UI**, dan **belum aman untuk credential asli** (jangan kasih dulu).
+
 Detail teknis & cara menjalankan ada di `backend/README.md`. Status per fase di `docs/11_ROADMAP.md`.
 
 Dokumen utama berada di folder `docs/`. Diagram Mermaid berada di `docs/diagrams/`. Skema database awal berada di `database/schema.sql`. ADR berada di `adr/` - termasuk ADR 0005-0013, hasil `REVIEW_DAN_REKOMENDASI_OVERPOWER.md` yang sudah diterima (Accepted) dan diintegrasikan penuh ke seluruh dokumen di atas.
