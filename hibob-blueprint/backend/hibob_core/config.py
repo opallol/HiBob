@@ -86,6 +86,13 @@ class Settings(BaseSettings):
         "docs/05_*", "docs/08_*", "*/tools/gateway.py", "*credential*",
     ])
 
+    # --- Sandbox (Phase 7, ADR 0011) + Credential Vault (ADR 0014) ---
+    sandbox_backend: str = "noop"       # off | noop | docker (off => shell/browser/mcp stay deny)
+    sandbox_image: str = "hibob/sandbox:latest"
+    browser_allowlist: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1"])
+    vault_key: str | None = None        # Fernet key from env HIBOB_VAULT_KEY; NEVER stored in the DB
+    vault_key_ref: str = "env:HIBOB_VAULT_KEY"  # pointer recorded in the vault row (not the key)
+
     # --- Cost circuit breaker (ADR 0012) ---
     # Hard daily ceiling in USD for cloud calls. Breach -> pause + require approval.
     daily_budget_usd: float = 5.00

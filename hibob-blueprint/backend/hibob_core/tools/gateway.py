@@ -1,9 +1,9 @@
-"""Tool Gateway (Phase 4, ADR 0005): validate -> provenance -> policy -> approve -> execute -> audit.
+"""Tool Gateway (Phase 4 + 7): validate -> provenance -> policy -> approve -> execute -> audit.
 
 The Policy Engine (deterministic) owns the allow/ask/deny decision; the model only requests. Trust
 accrues on successful, non-flagged runs and may auto-allow medium-risk tools, never high/critical
-(risk ceiling). shell/browser/mcp tools are default-deny until a sandbox exists (sandbox_available
-is always False in v0.1).
+(risk ceiling). shell/browser/mcp tools run inside an ephemeral sandbox (ADR 0011) when a backend is
+configured, and are default-deny when `sandbox_backend=off`.
 """
 
 from __future__ import annotations
@@ -16,34 +16,58 @@ import asyncpg
 from hibob_core.config import settings
 from hibob_core.db import repositories as core_repo
 from hibob_core.policy import engine, provenance
+from hibob_core.sandbox import repository as sandbox_repo
+from hibob_core.sandbox import runtime as sandbox_runtime
+from hibob_core.sandbox.spec import spec_for_tool
 from hibob_core.selfbuild import classifier as sb_classifier
 from hibob_core.selfbuild.tools import SELF_BUILD_TOOLS
 from hibob_core.tools import repository as repo
 from hibob_core.tools.builtins import HANDLERS
 
-_SANDBOX_AVAILABLE = False  # no ephemeral runtime in v0.1 (ADR 0011 deferred)
+_SANDBOX_TYPES = {"shell", "browser", "mcp"}
 
 
 class GatewayError(Exception):
     pass
 
 
-async def _execute(conn: asyncpg.Connection, tool: dict, tool_run_id: uuid.UUID, inp: dict) -> dict:
+async def _execute(
+    conn: asyncpg.Connection, tool: dict, tool_run_id: uuid.UUID, inp: dict
+) -> tuple[dict, uuid.UUID | None]:
     handler = HANDLERS.get(tool["name"])
     await repo.set_tool_run(conn, tool_run_id=tool_run_id, status="running", mark_started=True)
     if handler is None:
         await repo.set_tool_run(conn, tool_run_id=tool_run_id, status="failed",
                                 output_json={"error": "no handler"}, mark_finished=True)
         raise GatewayError(f"tool '{tool['name']}' has no executable handler")
+
+    sandbox_run_id: uuid.UUID | None = None
     try:
-        out = await handler(conn, inp)
+        if tool["tool_type"] in _SANDBOX_TYPES:
+            # ADR 0011: shell/browser/mcp execute inside an ephemeral, recorded sandbox.
+            spec = spec_for_tool(tool)
+            sandbox_run_id = await sandbox_repo.create_sandbox_run(
+                conn, tool_run_id=tool_run_id, spec=spec
+            )
+            sb = await sandbox_runtime.get_runner().run(spec, payload=inp)
+            out = await handler(conn, inp)
+            out = {**out, "sandbox": sb.output}
+            await sandbox_repo.finish_sandbox_run(
+                conn, sandbox_run_id=sandbox_run_id, exit_status=sb.exit_status
+            )
+        else:
+            out = await handler(conn, inp)
     except Exception as e:
+        if sandbox_run_id is not None:
+            await sandbox_repo.finish_sandbox_run(
+                conn, sandbox_run_id=sandbox_run_id, exit_status="failed"
+            )
         await repo.set_tool_run(conn, tool_run_id=tool_run_id, status="failed",
                                 output_json={"error": str(e)}, mark_finished=True)
         raise
     await repo.set_tool_run(conn, tool_run_id=tool_run_id, status="succeeded",
                             output_json=out, mark_finished=True)
-    return out
+    return out, sandbox_run_id
 
 
 async def request_tool(
@@ -80,7 +104,7 @@ async def request_tool(
     trust = await repo.get_trust(conn, tool_id=tool["id"], context=context)
     decision = engine.decide(
         risk_level=risk, tool_type=tool["tool_type"], trust_score=trust,
-        sandbox_available=_SANDBOX_AVAILABLE, provenance_flagged=suspected,
+        sandbox_available=sandbox_runtime.sandbox_enabled(), provenance_flagged=suspected,
     )
 
     await core_repo.write_audit(
@@ -123,11 +147,12 @@ async def request_tool(
         risk_level=risk, status="requested", trace_id=trace_id,
     )
     try:
-        await _execute(conn, tool, run_id, input)
+        _out, sandbox_run_id = await _execute(conn, tool, run_id, input)
         new_trust = await repo.bump_trust(
             conn, tool_id=tool["id"], context=context, increment=settings.trust_increment
         )
-        result.update(tool_run_id=str(run_id), status="succeeded", trust_score=new_trust)
+        result.update(tool_run_id=str(run_id), status="succeeded", trust_score=new_trust,
+                      sandbox_run_id=str(sandbox_run_id) if sandbox_run_id else None)
     except Exception:
         result.update(tool_run_id=str(run_id), status="failed")
     return result
@@ -169,7 +194,7 @@ async def approve_run(
             increment=settings.trust_increment,
         )
     except Exception:
-        status = "failed"
+        status = "failed"  # _execute already marked the run + sandbox failed
     await core_repo.write_audit(
         conn, actor_type="user", actor_id=str(core_repo.BOB_USER_ID),
         event_type="approval.approved", target_type="approval", target_id=str(approval_id),

@@ -6,7 +6,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from hibob_core.api import chat, documents, evals, memory, reflections, selfbuild, tools
+from hibob_core.api import (
+    chat, documents, evals, memory, reflections, sandbox, selfbuild, tools, vault,
+)
 from hibob_core.db.pool import close_pool, get_pool, init_pool
 from hibob_core.knowledge import vector_store as doc_vector_store
 from hibob_core.memory import service as memory_service
@@ -42,6 +44,8 @@ app.include_router(reflections.router, prefix="/v1")
 app.include_router(tools.router, prefix="/v1")
 app.include_router(selfbuild.router, prefix="/v1")
 app.include_router(evals.router, prefix="/v1")
+app.include_router(sandbox.router, prefix="/v1")
+app.include_router(vault.router, prefix="/v1")
 
 
 @app.get("/healthz")

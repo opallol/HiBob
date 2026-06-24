@@ -32,6 +32,14 @@ ingest = [
 multimodal = [
     "faster-whisper>=1.0",
 ]
+# Phase 7: ephemeral Docker sandbox (ADR 0011) + credential vault sealing (ADR 0014).
+# Lazy-imported; the Noop sandbox + fake sealer keep core/tests light.
+sandbox = [
+    "docker>=7.0",
+]
+vault = [
+    "cryptography>=43",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

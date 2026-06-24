@@ -10,6 +10,7 @@ No shell/browser/mcp tools are registered - those stay default-deny until a sand
 from __future__ import annotations
 
 import os
+from urllib.parse import urlparse
 
 import asyncpg
 
@@ -64,6 +65,16 @@ async def _draft_patch(conn: asyncpg.Connection, inp: dict) -> dict:
     }
 
 
+async def _browser_open(conn: asyncpg.Connection, inp: dict) -> dict:
+    # Phase 7 (ADR 0011): runs inside the sandbox (the gateway wraps this). localhost-only allowlist.
+    url = inp.get("url", "")
+    host = (urlparse(url).hostname or "")
+    if host not in settings.browser_allowlist:
+        raise ToolError(f"host not in browser allowlist: {host or '(none)'}")
+    return {"opened": True, "url": url,
+            "note": "browser action governed by sandbox; real Playwright via the docker backend"}
+
+
 from hibob_core.selfbuild import tools as _selfbuild  # noqa: E402  (avoid import cycle at top)
 
 HANDLERS = {
@@ -71,6 +82,7 @@ HANDLERS = {
     "document_search": _document_search,
     "repo_read": _repo_read,
     "draft_patch": _draft_patch,
+    "browser_open": _browser_open,  # Phase 7: tool_type=browser, runs in the sandbox
     **_selfbuild.HANDLERS,  # Phase 5: propose_blueprint_update, create_github_issue_draft
 }
 
@@ -87,6 +99,10 @@ _INTERNAL_SEED = [
     {"name": "draft_patch", "description": "Draft a code patch for review (never writes).",
      "tool_type": "internal", "risk_level": "high", "default_permission": "ask", "enabled": True,
      "input_schema": {"file": "string", "instruction": "string"}, "output_schema": {"draft": "string"}},
+    {"name": "browser_open", "description": "Open a localhost URL in a sandboxed browser (Phase 7).",
+     "tool_type": "browser", "risk_level": "high", "default_permission": "ask", "enabled": True,
+     "input_schema": {"url": "string", "constraints": {"allow_hosts": ["localhost", "127.0.0.1"]}},
+     "output_schema": {"opened": "bool"}},
 ]
 
 # Built-in internal tools + Phase 5 self-build proposal tools (ADR 0013).
